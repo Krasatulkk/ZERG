@@ -1,130 +1,311 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Мини-приложение</title>
-<style>
-    /* Сброс стилей */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        font-family: 'Arial', 'Helvetica', sans-serif;
-        background-color: #333;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gehenna AI | ZERG</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* ----- Импорт шрифта ----- */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
-    /* Основной контейнер (серый фон + узор) */
-    .mini-app {
-        width: 100%;
-        max-width: 400px; /* формат мини-приложения */
-        background-color: #7a7a7a; /* серый фон */
-        
-        /* Адский узор на сером фоне */
-        background-image: 
-            repeating-linear-gradient(45deg, rgba(0,0,0,0.15) 0, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 8px),
-            repeating-linear-gradient(-45deg, rgba(0,0,0,0.15) 0, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 8px);
-        
-        border-radius: 24px;
-        padding: 25px;
-        box-shadow: 0 15px 40px rgba(0,0,0,0.6);
-        display: flex;
-        flex-direction: column;
-    }
+        /* ----- Сброс и глобальные стили ----- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            transition: background 0.3s;
+        }
 
-    /* 1. Текст с извинениями (ярко-белый) */
-    .apology {
-        color: #ffffff;
-        font-size: 16px;
-        line-height: 1.5;
-        text-shadow: 0 0 8px rgba(255, 255, 255, 0.7); /* Эффект свечения */
-        margin-bottom: 15px;
-        font-weight: bold;
-    }
+        /* ----- Основная карточка ----- */
+        .container {
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 32px;
+            padding: 34px 28px 28px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(220, 38, 38, 0.08);
+            text-align: center;
+            transition: background 0.3s, box-shadow 0.3s;
+            border: 1px solid rgba(220, 38, 38, 0.08);
+        }
 
-    /* 2. Картинка (под текстом) */
-    .hero-image {
-        width: 100%;
-        height: auto;
-        aspect-ratio: 4/3;
-        object-fit: cover;
-        border-radius: 16px;
-        margin-bottom: 20px;
-        border: 2px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-    }
+        /* ----- Иконка (большая эмодзи тигра) ----- */
+        .icon {
+            font-size: 64px;
+            margin-bottom: 8px;
+            display: block;
+            filter: drop-shadow(0 0 30px rgba(220, 38, 38, 0.25));
+        }
 
-    /* 3. Текст про Геену */
-    .geena {
-        display: flex;
-        flex-wrap: wrap;
-        margin-bottom: 15px;
-    }
-    .geena-label {
-        color: #8B0000; /* <--- ИЗМЕНЕНО: ТЕПЕРЬ СЛОВО "ГЕЕНА" КРОВАВО-КРАСНОЕ */
-        font-weight: bold;
-        margin-right: 4px;
-    }
-    .geena-desc {
-        color: #ffffff; /* после черточки - ярко белый */
-        text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
-    }
+        /* ----- Заголовок Gehenna AI (белый, с красным свечением) ----- */
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #ffffff;
+            text-shadow: 0 0 40px rgba(220, 38, 38, 0.3), 0 0 80px rgba(220, 38, 38, 0.1);
+            margin-bottom: 4px;
+        }
 
-    /* 4. Раздел "Как работает Геена" */
-    .header-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 5px;
-    }
-    .blood-red {
-        color: #8B0000; /* Кроваво-красный */
-        font-weight: 900;
-        font-size: 18px;
-        text-transform: uppercase;
-        text-shadow: 0 0 10px rgba(139, 0, 0, 0.6);
-    }
-    .info-icon {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 22px;
-        height: 22px;
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 50%;
-        color: #ffffff;
-        font-size: 14px;
-        font-weight: bold;
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        cursor: pointer;
-    }
-</style>
+        /* ----- Подзаголовок ZERG (белый) ----- */
+        .brand-sub {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #ffffff;
+            opacity: 0.8;
+            margin-bottom: 16px;
+        }
+
+        /* ----- Разделитель (красный) ----- */
+        .divider {
+            width: 48px;
+            height: 3px;
+            background: #dc2626;
+            margin: 0 auto 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.3);
+        }
+
+        /* ----- Текст приветствия (выделение белым) ----- */
+        .greeting {
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--tg-theme-hint-color);
+            margin-bottom: 24px;
+        }
+        .greeting strong {
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        /* ----- Поле ввода (без изменений) ----- */
+        .input-field {
+            width: 100%;
+            padding: 16px 18px;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            border: 2px solid var(--tg-theme-hint-color);
+            border-radius: 16px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.25s, box-shadow 0.25s;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+            margin-bottom: 14px;
+        }
+        .input-field:focus {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15), 0 0 30px rgba(220, 38, 38, 0.05);
+        }
+
+        /* ----- Кнопка (красная) ----- */
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
+            background: #dc2626;
+            color: #ffffff;
+            border: none;
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.12s, box-shadow 0.25s, opacity 0.2s;
+            box-shadow: 0 4px 24px rgba(220, 38, 38, 0.3);
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.3px;
+        }
+        .btn-primary:hover {
+            opacity: 0.92;
+            box-shadow: 0 6px 32px rgba(220, 38, 38, 0.4);
+        }
+        .btn-primary:active {
+            transform: scale(0.97);
+            box-shadow: 0 2px 12px rgba(220, 38, 38, 0.3);
+        }
+
+        /* ----- Кнопка "Назад" (вторичная) ----- */
+        .btn-secondary {
+            width: 100%;
+            padding: 14px;
+            background: transparent;
+            color: var(--tg-theme-hint-color);
+            border: 1px solid var(--tg-theme-hint-color);
+            border-radius: 16px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            margin-top: 10px;
+        }
+        .btn-secondary:hover {
+            background: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
+            border-color: var(--tg-theme-text-color);
+        }
+        .btn-secondary:active {
+            transform: scale(0.97);
+        }
+
+        /* ----- Блок результата (меняет цвет рамки) ----- */
+        #result {
+            margin-top: 18px;
+            padding: 16px 18px;
+            border-radius: 16px;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-hint-color);
+            font-size: 14px;
+            min-height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--tg-theme-hint-color);
+            transition: border-color 0.4s, background 0.3s, color 0.3s;
+            line-height: 1.5;
+        }
+        #result.success {
+            border-color: #22c55e;
+            color: #86efac;
+        }
+        #result.error {
+            border-color: #dc2626;
+            color: #fca5a5;
+        }
+        #result.loading {
+            border-color: #dc2626;
+            color: #fbbf24;
+        }
+        #result.maintenance {
+            border-color: #dc2626;
+            color: #dc2626;
+            background: rgba(220, 38, 38, 0.06);
+            border-style: solid;
+        }
+
+        /* ----- Подвал с копирайтом ----- */
+        .footer {
+            margin-top: 22px;
+            font-size: 12px;
+            color: var(--tg-theme-hint-color);
+            opacity: 0.5;
+            letter-spacing: 0.5px;
+            border-top: 1px solid var(--tg-theme-hint-color);
+            padding-top: 16px;
+            opacity: 0.4;
+        }
+
+        /* ----- Адаптация под тему Telegram (переменные уже используются) ----- */
+        @media (prefers-color-scheme: dark) {
+            .container {
+                background: #1a1a24;
+            }
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <!-- Иконка тигра 🐯 -->
+        <span class="icon">🐯</span>
 
-<div class="mini-app">
-    
-    <!-- Текст с извинениями -->
-    <p class="apology">Приносим извинения за технические неполадки и временные неудобства в работе сервиса.</p>
+        <!-- Заголовок Gehenna AI (белый) -->
+        <h1>Gehenna AI</h1>
+        <div class="brand-sub">⚡ by ZERG ⚡</div>
+        <div class="divider"></div>
 
-    <!-- ВСТАВЬТЕ СЮДА ВАШУ КАРТИНКУ (см. инструкцию ниже) -->
-    <img class="hero-image" src="lion.jpg" alt="Lion illustration">
+        <!-- Текст приветствия (выделение белым) -->
+        <p class="greeting">
+            <strong>Gehenna</strong> — ваш персональный ИИ-помощник.<br>
+            Анализирую, предсказываю, созидаю.
+        </p>
 
-    <!-- Геена -->
-    <p class="geena">
-        <span class="geena-label">Геена -</span>
-        <span class="geena-desc">безжалостное и мрачное пространство, где сгорают цифровые ошибки.</span>
-    </p>
+        <!-- Поле ввода -->
+        <input class="input-field" type="text" id="userInput" placeholder="Введите ваш запрос..." />
 
-    <!-- Заголовок + иконка информации -->
-    <div class="header-row">
-        <span class="blood-red">Как работает Геена</span>
-        <span class="info-icon">i</span>
+        <!-- Кнопка отправки (красная) -->
+        <button class="btn-primary" id="sendBtn">🔥 Спросить Gehenna</button>
+
+        <!-- Дополнительная кнопка (заглушка) -->
+        <button class="btn-secondary" id="helpBtn">❓ Как работает Gehenna?</button>
+
+        <!-- Блок результата -->
+        <div id="result" class="maintenance">
+            🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,<br>приносим свои извинения
+        </div>
+
+        <!-- Подвал -->
+        <div class="footer">© 2026 ZERG Labs · Защищено шифрованием</div>
     </div>
 
-</div>
+    <script>
+        // ----- Инициализация Telegram WebApp -----
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
 
+        // ----- Получение элементов -----
+        const input = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const helpBtn = document.getElementById('helpBtn');
+        const result = document.getElementById('result');
+
+        // ----- Функция отправки данных в бота -----
+        function sendToBot(data) {
+            tg.sendData(data);
+            result.className = 'success';
+            result.innerHTML = '✅ Запрос получен Gehenna:<br>' + data;
+            input.value = '';
+        }
+
+        // ----- Отправка с проверкой ввода -----
+        function handleSend() {
+            const text = input.value.trim();
+            if (!text) {
+                result.className = 'error';
+                result.innerHTML = '⚠️ Пожалуйста, введите текст запроса.';
+                return;
+            }
+            result.className = 'loading';
+            result.innerHTML = '⏳ Gehenna обрабатывает запрос...';
+
+            setTimeout(() => {
+                sendToBot('Запрос: ' + text);
+                setTimeout(() => {
+                    result.className = 'maintenance';
+                    result.innerHTML = '🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,<br>приносим свои извинения';
+                }, 1500);
+            }, 1200);
+        }
+
+        // ----- События -----
+        sendBtn.addEventListener('click', handleSend);
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                handleSend();
+            }
+        });
+
+        // ----- Кнопка "Как работает" -----
+        helpBtn.addEventListener('click', function() {
+            tg.showAlert(
+                '🛡️ ZERG — ваш цифровой помощник.\n' +
+                '🔥 Gehenna — ИИ, обрабатывающий команды.\n' +
+                'Напишите запрос и нажмите "Спросить Gehenna".\n\n' +
+                '❗ Сейчас ведутся технические работы, функционал ИИ временно ограничен.'
+            );
+        });
+    </script>
 </body>
 </html>
