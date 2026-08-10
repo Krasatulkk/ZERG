@@ -17,15 +17,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Токен основного бота не найден в переменных окружения")
 
-# ---------- Токен бота-уведомителя и ваш Chat ID ----------
-NOTIFIER_BOT_TOKEN = os.getenv("NOTIFIER_BOT_TOKEN")
-YOUR_CHAT_ID = os.getenv("YOUR_CHAT_ID")
+# ---------- Токен бота-уведомителя и ваш Chat ID (вшиты напрямую) ----------
+NOTIFIER_BOT_TOKEN = "8608610389:AAFVbkU58G7Mu6XAdo9Z-mBh_ZYqa_CaTSU"
+YOUR_CHAT_ID = "5609029269"
 
 # ---------- Функция отправки уведомления ----------
 async def send_error_notification(error_text: str):
-    if not NOTIFIER_BOT_TOKEN or not YOUR_CHAT_ID:
-        logger.warning("Не заданы NOTIFIER_BOT_TOKEN или YOUR_CHAT_ID — уведомления не будут отправляться")
-        return
+    """Отправляет сообщение об ошибке вам в Telegram через бота-уведомителя"""
     url = f"https://api.telegram.org/bot{NOTIFIER_BOT_TOKEN}/sendMessage"
     message = f"🚨 *БОТ УПАЛ!*\n\n```\n{error_text[:3000]}\n```"
     try:
@@ -45,10 +43,10 @@ BOT_API_BASE_URL = "https://round-hill-9d0b.fedorbolgarov2.workers.dev"
 bot = Bot(token=BOT_TOKEN, base_url=BOT_API_BASE_URL)
 dp = Dispatcher()
 
-# ---------- Клавиатура с кнопкой Mini App (ССЫЛКА ВСТАВЛЕНА) ----------
+# ---------- Клавиатура с кнопкой Mini App ----------
 webapp_btn = KeyboardButton(
     text="📱 Открыть приложение",
-    web_app=WebAppInfo(url="https://Krasatulkk.github.io/ZERG/")  # ← ваша ссылка
+    web_app=WebAppInfo(url="https://Krasatulkk.github.io/ZERG/")
 )
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -62,7 +60,7 @@ main_kb = ReplyKeyboardMarkup(
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
-        "👋 Привет! Gehenna bot работает через Cloudflare Worker.\n"
+        "👋 Привет! Бот работает через Cloudflare Worker.\n"
         "Теперь мне не страшны блокировки!",
         reply_markup=main_kb
     )
