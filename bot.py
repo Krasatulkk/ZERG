@@ -1,8 +1,6 @@
 import asyncio
 import os
 import logging
-import aiohttp
-from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
@@ -17,47 +15,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Токен основного бота не найден в переменных окружения")
-
-# ---------- Токен бота-уведомителя и ваш Chat ID ----------
-NOTIFIER_BOT_TOKEN = "8608610389:AAFVbkU58G7Mu6XAdo9Z-mBh_ZYqa_CaTSU"
-YOUR_CHAT_ID = "5609029269"
-
-# ---------- Функция отправки уведомления об ошибке ----------
-async def send_error_notification(error_text: str):
-    """Отправляет сообщение об ошибке вам в Telegram через бота-уведомителя"""
-    url = f"https://api.telegram.org/bot{NOTIFIER_BOT_TOKEN}/sendMessage"
-    message = f"🚨 *БОТ УПАЛ!*\n\n```\n{error_text[:3000]}\n```"
-    try:
-        async with aiohttp.ClientSession() as session:
-            await session.post(url, json={
-                "chat_id": YOUR_CHAT_ID,
-                "text": message,
-                "parse_mode": "Markdown"
-            })
-    except Exception as e:
-        logger.error(f"Не удалось отправить уведомление об ошибке: {e}")
-
-# ---------- Функция отправки уведомления о стабильном запуске ----------
-async def send_start_notification():
-    """Отправляет сообщение о том, что бот успешно запущен и работает"""
-    url = f"https://api.telegram.org/bot{NOTIFIER_BOT_TOKEN}/sendMessage"
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    message = (
-        f"✅ *БОТ ЗАПУЩЕН И СТАБИЛЬНО РАБОТАЕТ!*\n"
-        f"🕒 Время запуска: `{now}`\n"
-        f"🆔 Bot ID: {BOT_TOKEN.split(':')[0]}\n"
-        f"🌐 Worker: `{BOT_API_BASE_URL}`"
-    )
-    try:
-        async with aiohttp.ClientSession() as session:
-            await session.post(url, json={
-                "chat_id": YOUR_CHAT_ID,
-                "text": message,
-                "parse_mode": "Markdown"
-            })
-        logger.info("Уведомление о запуске отправлено")
-    except Exception as e:
-        logger.error(f"Не удалось отправить уведомление о запуске: {e}")
 
 # ---------- Адрес Cloudflare Worker ----------
 BOT_API_BASE_URL = "https://round-hill-9d0b.fedorbolgarov2.workers.dev"
@@ -107,12 +64,15 @@ async def unknown_command(message: types.Message):
         "приносим свои извинения."
     )
 
+# ---------- Обработчик текстовых сообщений (с повторением вопроса) ----------
 @dp.message()
 async def handle_message(message: types.Message):
     if message.web_app_data:
         await message.answer(f"📩 Данные из Mini App: {message.web_app_data.data}")
     elif message.text and not message.text.startswith("/"):
+        user_text = message.text
         await message.answer(
+            f"❓ Вы задали вопрос: «{user_text}»\n\n"
             "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\n"
             "приносим свои извинения."
         )
@@ -120,18 +80,12 @@ async def handle_message(message: types.Message):
 # ---------- Основная функция ----------
 async def main():
     logger.info("🤖 Бот запущен через Cloudflare Worker!")
-    
-    # Отправляем уведомление о стабильном запуске
-    await send_start_notification()
-    
     await dp.start_polling(bot)
 
-# ---------- Точка входа с перехватом ошибок ----------
+# ---------- Точка входа ----------
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as e:
-        error_text = str(e)
-        logger.error(f"Критическая ошибка: {error_text}")
-        asyncio.run(send_error_notification(error_text))
+        logger.error(f"Критическая ошибка: {e}")
         raise
