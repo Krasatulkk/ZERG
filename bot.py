@@ -36,22 +36,38 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ---------- Обработчики известных команд ----------
+# ---------- Обработчики команд ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
-        "👋 Привет! Бот работает через Cloudflare Worker.\n"
+        "👋 Приветствую! Gehenna bot работает через Cloudflare Worker.\n"
         "Теперь мне не страшны блокировки!",
         reply_markup=main_kb
     )
 
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
-    await message.answer("📖 /start, /about, /reset")
+    await message.answer(
+        "📖 Доступные команды:\n"
+        "/start — приветствие\n"
+        "/about — о возможностях Gehenna AI\n"
+        "/capabilities — то же, что /about\n"
+        "/reset — сброс диалога (заглушка)"
+    )
 
 @dp.message(Command("about"))
 async def cmd_about(message: types.Message):
-    await message.answer("🤖 Бот на aiogram + Cloudflare Worker.")
+    await message.answer(
+        "Возможности Gehenna AI безграничны! "
+        "ZERG создали лучший ИИ."
+    )
+
+@dp.message(Command("capabilities"))
+async def cmd_capabilities(message: types.Message):
+    await message.answer(
+        "Возможности Gehenna AI безграничны! "
+        "ZERG создали лучший ИИ."
+    )
 
 @dp.message(Command("reset"))
 async def cmd_reset(message: types.Message):
@@ -65,16 +81,14 @@ async def handle_message(message: types.Message):
         await message.answer(f"📩 Данные из Mini App: {message.web_app_data.data}")
         return
 
-    # 2. Обычные текстовые сообщения или команды
+    # 2. Обычные текстовые сообщения или неизвестные команды
     if message.text:
-        # Если это команда (начинается с "/")
         if message.text.startswith("/"):
             await message.answer(
                 "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\n"
                 "приносим свои извинения."
             )
         else:
-            # Обычный текст – повторяем вопрос
             user_text = message.text
             await message.answer(
                 f"❓ Вы задали вопрос: «{user_text}»\n\n"
