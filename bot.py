@@ -36,7 +36,7 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ---------- Обработчики команд ----------
+# ---------- Обработчики известных команд ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
@@ -57,25 +57,30 @@ async def cmd_about(message: types.Message):
 async def cmd_reset(message: types.Message):
     await message.answer("🔄 Сброс выполнен.")
 
-@dp.message(Command())
-async def unknown_command(message: types.Message):
-    await message.answer(
-        "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\n"
-        "приносим свои извинения."
-    )
-
-# ---------- Обработчик текстовых сообщений (с повторением вопроса) ----------
+# ---------- Универсальный обработчик всех остальных сообщений ----------
 @dp.message()
 async def handle_message(message: types.Message):
+    # 1. Данные из Mini App
     if message.web_app_data:
         await message.answer(f"📩 Данные из Mini App: {message.web_app_data.data}")
-    elif message.text and not message.text.startswith("/"):
-        user_text = message.text
-        await message.answer(
-            f"❓ Вы задали вопрос: «{user_text}»\n\n"
-            "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\n"
-            "приносим свои извинения."
-        )
+        return
+
+    # 2. Обычные текстовые сообщения или команды
+    if message.text:
+        # Если это команда (начинается с "/")
+        if message.text.startswith("/"):
+            await message.answer(
+                "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\n"
+                "приносим свои извинения."
+            )
+        else:
+            # Обычный текст – повторяем вопрос
+            user_text = message.text
+            await message.answer(
+                f"❓ Вы задали вопрос: «{user_text}»\n\n"
+                "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\n"
+                "приносим свои извинения."
+            )
 
 # ---------- Основная функция ----------
 async def main():
