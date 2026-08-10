@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Моё приложение</title>
+    <!-- Подключаем SDK Telegram -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+        button {
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Привет из Mini App!</h1>
+    <button id="sendDataBtn">Отправить данные в бот</button>
+
+    <script>
+        // Инициализируем WebApp
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand(); // Раскрываем на весь экран
+
+        // Обработчик кнопки для отправки данных
+        document.getElementById('sendDataBtn').addEventListener('click', function() {
+            // Отправляем данные в бота
+            tg.sendData('Привет от пользователя!');
+            // Показываем уведомление пользователю
+            tg.showAlert('Данные отправлены!');
+        });
+    </script>
+</body>
+</html>
