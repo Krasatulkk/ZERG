@@ -3,7 +3,10 @@ import os
 import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from aiogram.exceptions import TelegramBadRequest
 from dotenv import load_dotenv
 
 # ---------- Настройка логирования ----------
@@ -19,9 +22,46 @@ if not BOT_TOKEN:
 # ---------- Адрес Cloudflare Worker ----------
 BOT_API_BASE_URL = "https://round-hill-9d0b.fedorbolgarov2.workers.dev"
 
-# ---------- Создание бота ----------
+# ---------- Хранилище состояний и бот ----------
+storage = MemoryStorage()
 bot = Bot(token=BOT_TOKEN, base_url=BOT_API_BASE_URL)
-dp = Dispatcher()
+dp = Dispatcher(storage=storage)
+
+# ===================== MIDDLEWARE ДЛЯ ОБРАБОТКИ ОШИБОК =====================
+@dp.errors()  # Этот декоратор регистрирует глобальный обработчик ошибок
+async def handle_errors(update: types.Update, exception: Exception) -> bool:
+    """
+    Перехватывает все исключения в обработчиках и отправляет пользователю
+    сообщение о технических работах.
+    Возвращает True, чтобы указать, что ошибка обработана.
+    """
+    # Логируем ошибку
+    logger.error(f"Произошла ошибка: {exception}", exc_info=True)
+
+    # Пытаемся получить chat_id из обновления
+    chat_id = None
+    if update.message:
+        chat_id = update.message.chat.id
+    elif update.callback_query:
+        chat_id = update.callback_query.message.chat.id
+    elif update.inline_query:
+        # Для inline-запросов нельзя отправить сообщение, просто возвращаем True
+        return True
+
+    if chat_id:
+        try:
+            await bot.send_message(
+                chat_id,
+                "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\nприносим свои извинения."
+            )
+        except TelegramBadRequest:
+            # Если не удалось отправить сообщение (например, пользователь заблокировал бота)
+            pass
+
+    # Возвращаем True, чтобы aiogram не продолжал обработку ошибки
+    return True
+
+# ===================== КЛАВИАТУРА И ОСТАЛЬНОЙ КОД =====================
 
 # ---------- Клавиатура с кнопкой Mini App ----------
 webapp_btn = KeyboardButton(
@@ -36,11 +76,22 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# ---------- Глобальный список для хранения ID сообщений бота (для /reset) ----------
+bot_messages = []
+
+async def send_and_store(chat_id: int, text: str, **kwargs):
+    sent = await bot.send_message(chat_id, text, **kwargs)
+    bot_messages.append(sent.message_id)
+    if len(bot_messages) > 100:
+        bot_messages.pop(0)
+    return sent
+
 # ---------- Обработчики команд ----------
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     await message.answer(
-        "👋 Приветствую! Gehenna bot работает через Cloudflare Worker.\n"
+        "👋 Привет! Бот работает через Cloudflare Worker.\n"
         "Теперь мне не страшны блокировки!",
         reply_markup=main_kb
     )
@@ -52,7 +103,7 @@ async def cmd_help(message: types.Message):
         "/start — приветствие\n"
         "/about — о возможностях Gehenna AI\n"
         "/capabilities — то же, что /about\n"
-        "/reset — сброс диалога (заглушка)"
+        "/reset — сбросить диалог и очистить чат (удалить мои сообщения)"
     )
 
 @dp.message(Command("about"))
@@ -70,18 +121,30 @@ async def cmd_capabilities(message: types.Message):
     )
 
 @dp.message(Command("reset"))
-async def cmd_reset(message: types.Message):
-    await message.answer("🔄 Сброс выполнен.")
+async def cmd_reset(message: types.Message, state: FSMContext):
+    await state.clear()
+    deleted = 0
+    to_delete = bot_messages[-10:]
+    for msg_id in reversed(to_delete):
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=msg_id)
+            deleted += 1
+        except Exception:
+            pass
+    bot_messages.clear()
+    await message.answer(
+        f"🔄 Диалог сброшен. Удалено {deleted} моих сообщений.\nНачинаем заново!",
+        reply_markup=main_kb
+    )
 
 # ---------- Универсальный обработчик всех остальных сообщений ----------
 @dp.message()
-async def handle_message(message: types.Message):
-    # 1. Данные из Mini App
+async def handle_message(message: types.Message, state: FSMContext):
+    # Этот обработчик может вызвать ошибку — она будет перехвачена middleware
     if message.web_app_data:
         await message.answer(f"📩 Данные из Mini App: {message.web_app_data.data}")
         return
 
-    # 2. Обычные текстовые сообщения или неизвестные команды
     if message.text:
         if message.text.startswith("/"):
             await message.answer(
