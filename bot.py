@@ -6,7 +6,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 import datetime
 
@@ -44,9 +44,10 @@ class FeedbackStates(StatesGroup):
 
 class BroadcastStates(StatesGroup):
     waiting_for_text = State()
+    waiting_confirm = State()   # состояние ожидания подтверждения
 
 class MaintenanceStates(StatesGroup):
-    waiting_for_duration = State()   # ожидание ввода часов или "off"
+    waiting_for_duration = State()
 
 # ---------- Клавиатуры ----------
 webapp_btn = KeyboardButton(
@@ -75,6 +76,14 @@ admin_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# ---------- Инлайн-клавиатура для подтверждения рассылки ----------
+confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="✅ Отправить", callback_data="confirm_broadcast"),
+        InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_broadcast")
+    ]
+])
+
 # ---------- Глобальный список для /reset (удаление сообщений) ----------
 bot_messages = []
 
@@ -93,9 +102,8 @@ async def handle_errors(update: types.Update, exception: Exception) -> bool:
 
 # ---------- Вспомогательная функция проверки режима ТО ----------
 async def check_maintenance(message: types.Message) -> bool:
-    """Возвращает True, если режим ТО активен и пользователь не админ."""
     if message.from_user.id in admin_users:
-        return False  # админам не показываем
+        return False
     if maintenance_mode:
         await message.answer(
             "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ.\n"
@@ -201,7 +209,6 @@ async def process_feedback(message: types.Message, state: FSMContext):
 
     logger.info(f"Отзыв от {user_id} ({username}): {feedback_text}")
 
-    # Отправляем отзыв всем администраторам
     if admin_users:
         sent_count = 0
         for admin_id in admin_users:
@@ -227,7 +234,7 @@ async def process_feedback(message: types.Message, state: FSMContext):
 
     await state.clear()
 
-# ---------- РАССЫЛКА (только для администраторов) ----------
+# ---------- РАССЫЛКА (с подтверждением) ----------
 @dp.message(Command("broadcast"))
 async def broadcast_command(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
@@ -243,21 +250,47 @@ async def broadcast_button(message: types.Message, state: FSMContext):
     await broadcast_command(message, state)
 
 @dp.message(StateFilter(BroadcastStates.waiting_for_text))
-async def process_broadcast(message: types.Message, state: FSMContext):
+async def process_broadcast_text(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
         return
-    broadcast_text = message.text
-    if not broadcast_text:
-        await message.answer("Пожалуйста, введите текст для рассылки.")
+    text = message.text
+    if not text:
+        await message.answer("Пожалуйста, введите текст.")
         return
 
-    total = len(all_users)
-    if total == 0:
-        await message.answer("Нет пользователей для рассылки.")
+    # Сохраняем текст в состоянии
+    await state.update_data(broadcast_text=text)
+    await state.set_state(BroadcastStates.waiting_confirm)
+
+    # Показываем предпросмотр с кнопками
+    await message.answer(
+        f"📢 **Предпросмотр рассылки:**\n\n{text}\n\nПодтвердите отправку:",
+        reply_markup=confirm_kb
+    )
+
+# ---------- Обработчики инлайн-кнопок подтверждения ----------
+@dp.callback_query(lambda c: c.data == "confirm_broadcast")
+async def confirm_broadcast(callback: types.CallbackQuery, state: FSMContext):
+    # Проверяем, что админ
+    if callback.from_user.id not in admin_users:
+        await callback.answer("⛔ Доступ запрещён.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    broadcast_text = data.get("broadcast_text")
+    if not broadcast_text:
+        await callback.answer("Ошибка: текст не найден.", show_alert=True)
         await state.clear()
         return
 
-    await message.answer(f"⏳ Начинаю рассылку для {total} пользователей...")
+    # Редактируем сообщение, чтобы убрать кнопки
+    await callback.message.edit_text("⏳ Начинаю рассылку...")
+
+    total = len(all_users)
+    if total == 0:
+        await callback.message.edit_text("Нет пользователей для рассылки.")
+        await state.clear()
+        return
 
     success_count = 0
     fail_count = 0
@@ -271,20 +304,34 @@ async def process_broadcast(message: types.Message, state: FSMContext):
             fail_count += 1
             logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
 
-    await message.answer(
+    await callback.message.edit_text(
         f"✅ Рассылка завершена!\n"
         f"📨 Успешно отправлено: {success_count}\n"
         f"❌ Не удалось отправить: {fail_count}"
     )
     await state.clear()
+    # Показываем админ-клавиатуру
+    await callback.message.answer("Вы вернулись в админ-меню.", reply_markup=admin_kb)
+    await callback.answer()
 
-# ---------- РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ (только для администраторов) ----------
+@dp.callback_query(lambda c: c.data == "cancel_broadcast")
+async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
+    # Проверяем, что админ
+    if callback.from_user.id not in admin_users:
+        await callback.answer("⛔ Доступ запрещён.", show_alert=True)
+        return
+
+    await state.clear()
+    await callback.message.edit_text("❌ Рассылка отменена.")
+    await callback.message.answer("Вы вернулись в админ-меню.", reply_markup=admin_kb)
+    await callback.answer()
+
+# ---------- РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ ----------
 @dp.message(Command("maintenance"))
 async def maintenance_command(message: types.Message, state: FSMContext):
     if message.from_user.id not in admin_users:
         await message.answer("⛔ Доступ запрещён.")
         return
-    # Если уже включён, показываем статус
     if maintenance_mode:
         if maintenance_until:
             until_str = maintenance_until.strftime("%d.%m.%Y %H:%M")
@@ -316,7 +363,6 @@ async def process_maintenance_duration(message: types.Message, state: FSMContext
         await state.clear()
         return
 
-    # Объявляем глобальные переменные в самом начале функции
     global maintenance_mode, maintenance_until
 
     text = message.text.strip().lower()
@@ -325,7 +371,6 @@ async def process_maintenance_duration(message: types.Message, state: FSMContext
         maintenance_until = None
         await state.clear()
         await message.answer("✅ Режим ТО отключён.", reply_markup=admin_kb)
-        # Уведомляем всех админов
         for admin_id in admin_users:
             try:
                 await bot.send_message(admin_id, "🔔 Режим ТО отключён администратором.")
@@ -354,15 +399,13 @@ async def process_maintenance_duration(message: types.Message, state: FSMContext
                 )
             except Exception:
                 pass
-        # Запускаем таймер автоматического отключения
         asyncio.create_task(auto_disable_maintenance(hours))
     except ValueError:
         await message.answer("❌ Введите число (часы) или `off`.")
 
 async def auto_disable_maintenance(hours: float):
-    # Объявляем глобальные переменные в начале функции
     global maintenance_mode, maintenance_until
-    await asyncio.sleep(hours * 3600)  # переводим часы в секунды
+    await asyncio.sleep(hours * 3600)
     if maintenance_mode and maintenance_until and datetime.datetime.now() >= maintenance_until:
         maintenance_mode = False
         maintenance_until = None
@@ -373,10 +416,9 @@ async def auto_disable_maintenance(hours: float):
             except Exception:
                 pass
 
-# ---------- Обработка обычных текстовых сообщений (не команд) ----------
+# ---------- Обработка обычных текстовых сообщений ----------
 @dp.message()
 async def handle_other_messages(message: types.Message, state: FSMContext):
-    # Проверяем режим ТО для всех, кроме админов
     if await check_maintenance(message):
         return
 
