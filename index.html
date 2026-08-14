@@ -9,7 +9,6 @@
         /* ----- Импорт шрифта ----- */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
-        /* ----- Сброс и глобальные стили ----- */
         * {
             margin: 0;
             padding: 0;
@@ -26,39 +25,31 @@
             padding: 20px;
             transition: background 0.3s;
         }
-
-        /* ----- Основная карточка ----- */
         .container {
             background: var(--tg-theme-secondary-bg-color);
             border-radius: 32px;
-            padding: 34px 28px 28px;
+            padding: 30px 24px 24px;
             max-width: 420px;
             width: 100%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(220, 38, 38, 0.08);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 40px rgba(220,38,38,0.08);
             text-align: center;
             transition: background 0.3s, box-shadow 0.3s;
-            border: 1px solid rgba(220, 38, 38, 0.08);
+            border: 1px solid rgba(220,38,38,0.08);
         }
-
-        /* ----- Иконка (большая эмодзи тигра) ----- */
         .icon {
             font-size: 64px;
             margin-bottom: 8px;
             display: block;
-            filter: drop-shadow(0 0 30px rgba(220, 38, 38, 0.25));
+            filter: drop-shadow(0 0 30px rgba(220,38,38,0.25));
         }
-
-        /* ----- Заголовок Gehenna AI (белый, с красным свечением) ----- */
         h1 {
             font-size: 32px;
             font-weight: 800;
             letter-spacing: -0.5px;
             color: #ffffff;
-            text-shadow: 0 0 40px rgba(220, 38, 38, 0.3), 0 0 80px rgba(220, 38, 38, 0.1);
+            text-shadow: 0 0 40px rgba(220,38,38,0.3), 0 0 80px rgba(220,38,38,0.1);
             margin-bottom: 4px;
         }
-
-        /* ----- Подзаголовок ZERG (белый) ----- */
         .brand-sub {
             font-size: 13px;
             font-weight: 600;
@@ -68,32 +59,34 @@
             opacity: 0.8;
             margin-bottom: 16px;
         }
-
-        /* ----- Разделитель (красный) ----- */
         .divider {
             width: 48px;
             height: 3px;
             background: #dc2626;
             margin: 0 auto 20px;
             border-radius: 4px;
-            box-shadow: 0 0 20px rgba(220, 38, 38, 0.3);
+            box-shadow: 0 0 20px rgba(220,38,38,0.3);
         }
-
-        /* ----- Текст приветствия (выделение белым) ----- */
         .greeting {
             font-size: 15px;
             line-height: 1.7;
             color: var(--tg-theme-hint-color);
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
         .greeting strong {
             color: #ffffff;
             font-weight: 700;
         }
 
-        /* ----- Поле ввода (без изменений) ----- */
-        .input-field {
-            width: 100%;
+        /* ----- Новая строка ввода (поле + кнопка стрелка) ----- */
+        .input-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .input-row input {
+            flex: 1;
             padding: 16px 18px;
             background-color: var(--tg-theme-bg-color);
             color: var(--tg-theme-text-color);
@@ -104,39 +97,59 @@
             transition: border-color 0.25s, box-shadow 0.25s;
             box-sizing: border-box;
             font-family: 'Inter', sans-serif;
-            margin-bottom: 14px;
         }
-        .input-field:focus {
+        .input-row input:focus {
             border-color: #dc2626;
-            box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15), 0 0 30px rgba(220, 38, 38, 0.05);
+            box-shadow: 0 0 0 4px rgba(220,38,38,0.15), 0 0 30px rgba(220,38,38,0.05);
+        }
+        .input-row button {
+            background: #dc2626;
+            border: none;
+            border-radius: 16px;
+            padding: 16px 20px;
+            cursor: pointer;
+            font-size: 24px;
+            color: #fff;
+            transition: transform 0.12s, box-shadow 0.25s, opacity 0.2s;
+            box-shadow: 0 4px 24px rgba(220,38,38,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        .input-row button:hover {
+            opacity: 0.92;
+            box-shadow: 0 6px 32px rgba(220,38,38,0.4);
+        }
+        .input-row button:active {
+            transform: scale(0.95);
         }
 
-        /* ----- Кнопка (красная) ----- */
-        .btn-primary {
+        /* ----- Кнопка "БОЛЬШЕ ФУНКЦИЙ" (красная, новая) ----- */
+        .btn-more {
             width: 100%;
-            padding: 16px;
+            padding: 14px;
             background: #dc2626;
             color: #ffffff;
             border: none;
             border-radius: 16px;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
             cursor: pointer;
             transition: transform 0.12s, box-shadow 0.25s, opacity 0.2s;
-            box-shadow: 0 4px 24px rgba(220, 38, 38, 0.3);
+            box-shadow: 0 4px 20px rgba(220,38,38,0.25);
             font-family: 'Inter', sans-serif;
-            letter-spacing: 0.3px;
+            margin-bottom: 14px;
         }
-        .btn-primary:hover {
+        .btn-more:hover {
             opacity: 0.92;
-            box-shadow: 0 6px 32px rgba(220, 38, 38, 0.4);
+            box-shadow: 0 6px 28px rgba(220,38,38,0.35);
         }
-        .btn-primary:active {
+        .btn-more:active {
             transform: scale(0.97);
-            box-shadow: 0 2px 12px rgba(220, 38, 38, 0.3);
         }
 
-        /* ----- Кнопка "Назад" (вторичная) ----- */
+        /* ----- Вторичная кнопка (справка) ----- */
         .btn-secondary {
             width: 100%;
             padding: 14px;
@@ -160,7 +173,7 @@
             transform: scale(0.97);
         }
 
-        /* ----- Блок результата (меняет цвет рамки) ----- */
+        /* ----- Блок результата ----- */
         #result {
             margin-top: 18px;
             padding: 16px 18px;
@@ -175,6 +188,7 @@
             border: 2px solid var(--tg-theme-hint-color);
             transition: border-color 0.4s, background 0.3s, color 0.3s;
             line-height: 1.5;
+            flex-direction: column;
         }
         #result.success {
             border-color: #22c55e;
@@ -188,14 +202,20 @@
             border-color: #dc2626;
             color: #fbbf24;
         }
-        #result.maintenance {
+        #result.website {
             border-color: #dc2626;
             color: #dc2626;
-            background: rgba(220, 38, 38, 0.06);
+            background: rgba(220,38,38,0.06);
             border-style: solid;
         }
+        #result .website-link {
+            color: #dc2626;
+            font-weight: 700;
+            text-decoration: underline;
+            cursor: default;
+        }
 
-        /* ----- Подвал с копирайтом ----- */
+        /* ----- Подвал ----- */
         .footer {
             margin-top: 22px;
             font-size: 12px;
@@ -206,8 +226,6 @@
             padding-top: 16px;
             opacity: 0.4;
         }
-
-        /* ----- Адаптация под тему Telegram (переменные уже используются) ----- */
         @media (prefers-color-scheme: dark) {
             .container {
                 background: #1a1a24;
@@ -217,35 +235,34 @@
 </head>
 <body>
     <div class="container">
-        <!-- Иконка тигра 🐯 -->
-        <span class="icon">🐯</span>
+        <!-- Иконка демона -->
+        <span class="icon">😈</span>
 
-        <!-- Заголовок Gehenna AI (белый) -->
         <h1>Gehenna AI</h1>
         <div class="brand-sub">⚡ by ZERG ⚡</div>
         <div class="divider"></div>
 
-        <!-- Текст приветствия (выделение белым) -->
         <p class="greeting">
             <strong>Gehenna</strong> — ваш персональный ИИ-помощник.<br>
             Анализирую, предсказываю, созидаю.
         </p>
 
-        <!-- Поле ввода -->
-        <input class="input-field" type="text" id="userInput" placeholder="Введите ваш запрос..." />
+        <!-- Новая кнопка "БОЛЬШЕ ФУНКЦИЙ" -->
+        <button class="btn-more" id="moreBtn">🚀 БОЛЬШЕ ФУНКЦИЙ</button>
 
-        <!-- Кнопка отправки (красная) -->
-        <button class="btn-primary" id="sendBtn">🔥 Спросить Gehenna</button>
+        <!-- Поле ввода + кнопка стрелка -->
+        <div class="input-row">
+            <input type="text" id="userInput" placeholder="Введите ваш запрос..." />
+            <button id="sendBtn">➡️</button>
+        </div>
 
-        <!-- Дополнительная кнопка (заглушка) -->
         <button class="btn-secondary" id="helpBtn">❓ Как работает Gehenna?</button>
 
         <!-- Блок результата -->
-        <div id="result" class="maintenance">
-            🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,<br>приносим свои извинения
+        <div id="result" class="website">
+            🌐 Gehenna website: <span class="website-link">xxxxx</span>
         </div>
 
-        <!-- Подвал -->
         <div class="footer">© 2026 ZERG Labs · Защищено шифрованием</div>
     </div>
 
@@ -258,18 +275,26 @@
         // ----- Получение элементов -----
         const input = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
+        const moreBtn = document.getElementById('moreBtn');
         const helpBtn = document.getElementById('helpBtn');
         const result = document.getElementById('result');
 
         // ----- Функция отправки данных в бота -----
-        function sendToBot(data) {
+        function sendToBot(data, callback) {
             tg.sendData(data);
             result.className = 'success';
             result.innerHTML = '✅ Запрос получен Gehenna:<br>' + data;
             input.value = '';
+
+            // Через 1.5 секунды показываем ссылку на сайт
+            setTimeout(() => {
+                result.className = 'website';
+                result.innerHTML = '🌐 Gehenna website: <span class="website-link">xxxxx</span>';
+                if (callback) callback();
+            }, 1500);
         }
 
-        // ----- Отправка с проверкой ввода -----
+        // ----- Обработка основного запроса -----
         function handleSend() {
             const text = input.value.trim();
             if (!text) {
@@ -279,17 +304,16 @@
             }
             result.className = 'loading';
             result.innerHTML = '⏳ Gehenna обрабатывает запрос...';
-
-            setTimeout(() => {
-                sendToBot('Запрос: ' + text);
-                setTimeout(() => {
-                    result.className = 'maintenance';
-                    result.innerHTML = '🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,<br>приносим свои извинения';
-                }, 1500);
-            }, 1200);
+            sendToBot('Запрос: ' + text);
         }
 
-        // ----- События -----
+        // ----- Кнопка "БОЛЬШЕ ФУНКЦИЙ" -----
+        moreBtn.addEventListener('click', function() {
+            const msg = 'многофункциональный ИИ помощник для любых ваших запросов тут : xxxxx';
+            sendToBot(msg);
+        });
+
+        // ----- События для отправки -----
         sendBtn.addEventListener('click', handleSend);
         input.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
@@ -302,7 +326,7 @@
             tg.showAlert(
                 '🛡️ ZERG — ваш цифровой помощник.\n' +
                 '🔥 Gehenna — ИИ, обрабатывающий команды.\n' +
-                'Напишите запрос и нажмите "Спросить Gehenna".\n\n' +
+                'Напишите запрос и нажмите ➡️ или кнопку "БОЛЬШЕ ФУНКЦИЙ".\n\n' +
                 '❗ Сейчас ведутся технические работы, функционал ИИ временно ограничен.'
             );
         });
