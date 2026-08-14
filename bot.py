@@ -30,10 +30,11 @@ dp = Dispatcher(storage=storage)
 ADMIN_SECRET_CODE = "5545z"
 
 # ---------- Хранилища ----------
-admin_users = set()      # user_id администраторов
-all_users = set()        # все пользователи, кто взаимодействовал с ботом
-maintenance_mode = False # флаг режима ТО
-maintenance_until = None # время окончания ТО (datetime или None)
+admin_users = set()          # user_id администраторов
+admin_info = {}              # {user_id: (username, full_name)}
+all_users = set()            # все пользователи
+maintenance_mode = False
+maintenance_until = None
 
 # ---------- FSM состояния ----------
 class AdminAuth(StatesGroup):
@@ -44,16 +45,17 @@ class FeedbackStates(StatesGroup):
 
 class BroadcastStates(StatesGroup):
     waiting_for_text = State()
-    waiting_confirm = State()   # состояние ожидания подтверждения
+    waiting_confirm = State()
 
 class MaintenanceStates(StatesGroup):
     waiting_for_duration = State()
 
-# ---------- Клавиатуры ----------
+# ---------- Клавиатуры (с Reply-кнопкой приложения) ----------
 webapp_btn = KeyboardButton(
     text="📱 Открыть приложение",
     web_app=WebAppInfo(url="https://Krasatulkk.github.io/ZERG/")
 )
+
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
         [webapp_btn],
@@ -69,6 +71,7 @@ admin_kb = ReplyKeyboardMarkup(
         [webapp_btn],
         [KeyboardButton(text="📝 Отправить отзыв")],
         [KeyboardButton(text="📢 Отправить рассылку")],
+        [KeyboardButton(text="👥 Список админов")],
         [KeyboardButton(text="🛠 Режим ТО")],
         [KeyboardButton(text="🚪 Выйти из админ-режима")],
         [KeyboardButton(text="ℹ️ Помощь")]
@@ -76,7 +79,7 @@ admin_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ---------- Инлайн-клавиатура для подтверждения рассылки ----------
+# ---------- Inline-клавиатура для подтверждения рассылки ----------
 confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
     [
         InlineKeyboardButton(text="✅ Отправить", callback_data="confirm_broadcast"),
@@ -84,7 +87,7 @@ confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
     ]
 ])
 
-# ---------- Глобальный список для /reset (удаление сообщений) ----------
+# ---------- Глобальный список для /reset ----------
 bot_messages = []
 
 async def send_and_store(chat_id: int, text: str, **kwargs):
@@ -100,7 +103,7 @@ async def handle_errors(update: types.Update, exception: Exception) -> bool:
     logger.error(f"Ошибка: {exception}", exc_info=True)
     return True
 
-# ---------- Вспомогательная функция проверки режима ТО ----------
+# ---------- Проверка режима ТО ----------
 async def check_maintenance(message: types.Message) -> bool:
     if message.from_user.id in admin_users:
         return False
@@ -119,11 +122,31 @@ async def cmd_start(message: types.Message, state: FSMContext):
         return
     await state.clear()
     all_users.add(message.from_user.id)
+
+    # Определяем клавиатуру в зависимости от роли
+    kb = admin_kb if message.from_user.id in admin_users else main_kb
+
+    # Текст приветствия с количеством админов
+    admin_count = len(admin_users)
     await message.answer(
-        "👋 Вас приветствует Gehenna AI!\n"
+        f"👋 Вас приветствует Gehenna AI!\n"
+        f"👥 Администраторов в сети: {admin_count}\n\n"
         "Вы в обычном режиме. Для доступа к админ-панели нажмите «Войти как администратор».\n\n"
         "📱 Скачайте Gehenna App для полного функционала: [ссылка на приложение]",
-        reply_markup=main_kb
+        reply_markup=kb
+    )
+
+# ---------- /app (ручной запрос) ----------
+@dp.message(Command("app"))
+async def cmd_app(message: types.Message):
+    if await check_maintenance(message):
+        return
+    kb = admin_kb if message.from_user.id in admin_users else main_kb
+    admin_count = len(admin_users)
+    await message.answer(
+        f"📱 Кнопка для открытия приложения:\n"
+        f"👥 Админов в сети: {admin_count}",
+        reply_markup=kb
     )
 
 # ---------- /admin и кнопка входа ----------
@@ -148,14 +171,16 @@ async def process_admin_code(message: types.Message, state: FSMContext):
         return
     code = message.text.strip()
     if code == ADMIN_SECRET_CODE:
-        admin_users.add(message.from_user.id)
-        all_users.add(message.from_user.id)
+        user_id = message.from_user.id
+        admin_users.add(user_id)
+        all_users.add(user_id)
+        admin_info[user_id] = (message.from_user.username or "без_имени", message.from_user.full_name or "не указан")
         await state.clear()
         await message.answer(
             "✅ Доступ предоставлен! Теперь вы администратор.",
             reply_markup=admin_kb
         )
-        logger.info(f"Администратор вошёл: {message.from_user.id}")
+        logger.info(f"Администратор вошёл: {user_id}")
     else:
         await message.answer("❌ Неверный код. Попробуйте ещё раз или /cancel.")
 
@@ -164,20 +189,48 @@ async def process_admin_code(message: types.Message, state: FSMContext):
 async def cmd_logout(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
         return
-    if message.from_user.id in admin_users:
-        admin_users.remove(message.from_user.id)
+    user_id = message.from_user.id
+    if user_id in admin_users:
+        admin_users.remove(user_id)
+        if user_id in admin_info:
+            del admin_info[user_id]
         await state.clear()
         await message.answer(
             "🚪 Вы вышли из админ-режима.",
             reply_markup=main_kb
         )
-        logger.info(f"Администратор вышел: {message.from_user.id}")
+        logger.info(f"Администратор вышел: {user_id}")
     else:
         await message.answer("Вы не были в админ-режиме.")
 
 @dp.message(lambda msg: msg.text == "🚪 Выйти из админ-режима")
 async def logout_button(message: types.Message, state: FSMContext):
     await cmd_logout(message, state)
+
+# ---------- Список администраторов ----------
+@dp.message(Command("admin_list"))
+async def cmd_admin_list(message: types.Message):
+    if message.from_user.id not in admin_users:
+        await message.answer("⛔ Доступ запрещён. Вы не администратор.")
+        return
+    if not admin_info:
+        await message.answer("👥 В данный момент нет активных администраторов.")
+        return
+
+    lines = []
+    for i, (uid, (username, full_name)) in enumerate(admin_info.items(), 1):
+        lines.append(
+            f"{i}. ID: `{uid}`\n"
+            f"   Username: @{username}\n"
+            f"   Имя: {full_name}\n"
+            f"   Статус: ✅ Онлайн"
+        )
+    text = "👥 **Список активных администраторов:**\n\n" + "\n".join(lines)
+    await message.answer(text, parse_mode="Markdown")
+
+@dp.message(lambda msg: msg.text == "👥 Список админов")
+async def admin_list_button(message: types.Message):
+    await cmd_admin_list(message)
 
 # ---------- Обработка отзыва (для всех) ----------
 @dp.message(Command("feedback"))
@@ -258,20 +311,16 @@ async def process_broadcast_text(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, введите текст.")
         return
 
-    # Сохраняем текст в состоянии
     await state.update_data(broadcast_text=text)
     await state.set_state(BroadcastStates.waiting_confirm)
 
-    # Показываем предпросмотр с кнопками
     await message.answer(
         f"📢 **Предпросмотр рассылки:**\n\n{text}\n\nПодтвердите отправку:",
         reply_markup=confirm_kb
     )
 
-# ---------- Обработчики инлайн-кнопок подтверждения ----------
 @dp.callback_query(lambda c: c.data == "confirm_broadcast")
 async def confirm_broadcast(callback: types.CallbackQuery, state: FSMContext):
-    # Проверяем, что админ
     if callback.from_user.id not in admin_users:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
@@ -283,7 +332,6 @@ async def confirm_broadcast(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
-    # Редактируем сообщение, чтобы убрать кнопки
     await callback.message.edit_text("⏳ Начинаю рассылку...")
 
     total = len(all_users)
@@ -310,13 +358,11 @@ async def confirm_broadcast(callback: types.CallbackQuery, state: FSMContext):
         f"❌ Не удалось отправить: {fail_count}"
     )
     await state.clear()
-    # Показываем админ-клавиатуру
     await callback.message.answer("Вы вернулись в админ-меню.", reply_markup=admin_kb)
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "cancel_broadcast")
 async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
-    # Проверяем, что админ
     if callback.from_user.id not in admin_users:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
@@ -451,9 +497,11 @@ async def cmd_help(message: types.Message):
         "/start — приветствие\n"
         "/admin — войти как администратор (ввести код)\n"
         "/logout — выйти из админ-режима\n"
+        "/admin_list — список активных администраторов (только для админов)\n"
         "/feedback — оставить отзыв\n"
         "/broadcast — отправить рассылку (только для админов)\n"
         "/maintenance — управление режимом ТО (только для админов)\n"
+        "/app — показать кнопку приложения и количество админов\n"
         "/help — эта справка\n\n"
         "📱 Для работы с ИИ используйте Gehenna App."
     )
