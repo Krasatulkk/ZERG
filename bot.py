@@ -8,6 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from dotenv import load_dotenv
+import datetime
 
 # ---------- Настройка ----------
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +32,8 @@ ADMIN_SECRET_CODE = "5545z"
 # ---------- Хранилища ----------
 admin_users = set()      # user_id администраторов
 all_users = set()        # все пользователи, кто взаимодействовал с ботом
+maintenance_mode = False # флаг режима ТО
+maintenance_until = None # время окончания ТО (datetime или None)
 
 # ---------- FSM состояния ----------
 class AdminAuth(StatesGroup):
@@ -40,10 +43,12 @@ class FeedbackStates(StatesGroup):
     waiting_for_text = State()
 
 class BroadcastStates(StatesGroup):
-    waiting_for_text = State()   # для ввода текста рассылки
+    waiting_for_text = State()
+
+class MaintenanceStates(StatesGroup):
+    waiting_for_duration = State()   # ожидание ввода часов или "off"
 
 # ---------- Клавиатуры ----------
-# Обычная (для всех)
 webapp_btn = KeyboardButton(
     text="📱 Открыть приложение",
     web_app=WebAppInfo(url="https://Krasatulkk.github.io/ZERG/")
@@ -58,12 +63,12 @@ main_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# Админская (добавлена кнопка рассылки)
 admin_kb = ReplyKeyboardMarkup(
     keyboard=[
         [webapp_btn],
         [KeyboardButton(text="📝 Отправить отзыв")],
         [KeyboardButton(text="📢 Отправить рассылку")],
+        [KeyboardButton(text="🛠 Режим ТО")],
         [KeyboardButton(text="🚪 Выйти из админ-режима")],
         [KeyboardButton(text="ℹ️ Помощь")]
     ],
@@ -86,11 +91,25 @@ async def handle_errors(update: types.Update, exception: Exception) -> bool:
     logger.error(f"Ошибка: {exception}", exc_info=True)
     return True
 
+# ---------- Вспомогательная функция проверки режима ТО ----------
+async def check_maintenance(message: types.Message) -> bool:
+    """Возвращает True, если режим ТО активен и пользователь не админ."""
+    if message.from_user.id in admin_users:
+        return False  # админам не показываем
+    if maintenance_mode:
+        await message.answer(
+            "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ.\n"
+            "Приложение временно недоступно. Приносим извинения за неудобства."
+        )
+        return True
+    return False
+
 # ---------- /start ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     await state.clear()
-    # Добавляем пользователя в общий список
     all_users.add(message.from_user.id)
     await message.answer(
         "👋 Вас приветствует Gehenna AI!\n"
@@ -102,6 +121,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
 # ---------- /admin и кнопка входа ----------
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     if message.from_user.id in admin_users:
         await message.answer("✅ Вы уже вошли как администратор.", reply_markup=admin_kb)
         return
@@ -115,10 +136,12 @@ async def admin_button(message: types.Message, state: FSMContext):
 # ---------- Проверка кода ----------
 @dp.message(StateFilter(AdminAuth.waiting_for_code))
 async def process_admin_code(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     code = message.text.strip()
     if code == ADMIN_SECRET_CODE:
         admin_users.add(message.from_user.id)
-        all_users.add(message.from_user.id)  # админ тоже пользователь
+        all_users.add(message.from_user.id)
         await state.clear()
         await message.answer(
             "✅ Доступ предоставлен! Теперь вы администратор.",
@@ -131,6 +154,8 @@ async def process_admin_code(message: types.Message, state: FSMContext):
 # ---------- /logout и кнопка выхода ----------
 @dp.message(Command("logout"))
 async def cmd_logout(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     if message.from_user.id in admin_users:
         admin_users.remove(message.from_user.id)
         await state.clear()
@@ -149,6 +174,8 @@ async def logout_button(message: types.Message, state: FSMContext):
 # ---------- Обработка отзыва (для всех) ----------
 @dp.message(Command("feedback"))
 async def feedback_command(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     all_users.add(message.from_user.id)
     await state.set_state(FeedbackStates.waiting_for_text)
     await message.answer(
@@ -161,6 +188,8 @@ async def feedback_button(message: types.Message, state: FSMContext):
 
 @dp.message(StateFilter(FeedbackStates.waiting_for_text))
 async def process_feedback(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     feedback_text = message.text
     if not feedback_text:
         await message.answer("Пожалуйста, напишите текст отзыва.")
@@ -170,7 +199,6 @@ async def process_feedback(message: types.Message, state: FSMContext):
     username = message.from_user.username or "без_имени"
     full_name = message.from_user.full_name or "не указан"
 
-    # Сохраняем отзыв (заглушка – можно заменить на запись в БД)
     logger.info(f"Отзыв от {user_id} ({username}): {feedback_text}")
 
     # Отправляем отзыв всем администраторам
@@ -202,6 +230,8 @@ async def process_feedback(message: types.Message, state: FSMContext):
 # ---------- РАССЫЛКА (только для администраторов) ----------
 @dp.message(Command("broadcast"))
 async def broadcast_command(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     if message.from_user.id not in admin_users:
         await message.answer("⛔ Доступ запрещён. Вы не администратор.")
         return
@@ -214,12 +244,13 @@ async def broadcast_button(message: types.Message, state: FSMContext):
 
 @dp.message(StateFilter(BroadcastStates.waiting_for_text))
 async def process_broadcast(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
     broadcast_text = message.text
     if not broadcast_text:
         await message.answer("Пожалуйста, введите текст для рассылки.")
         return
 
-    # Отправляем сообщение всем пользователям
     total = len(all_users)
     if total == 0:
         await message.answer("Нет пользователей для рассылки.")
@@ -232,11 +263,9 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     fail_count = 0
     for user_id in all_users:
         try:
-            # Формируем сообщение
             text_to_send = f"📢 **Я СЛЫШУ ГОЛОС БОГА:**\n\n{broadcast_text}"
             await bot.send_message(user_id, text_to_send)
             success_count += 1
-            # Небольшая задержка, чтобы не превысить лимиты Telegram
             await asyncio.sleep(0.05)
         except Exception as e:
             fail_count += 1
@@ -249,10 +278,111 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
+# ---------- РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ (только для администраторов) ----------
+@dp.message(Command("maintenance"))
+async def maintenance_command(message: types.Message, state: FSMContext):
+    if message.from_user.id not in admin_users:
+        await message.answer("⛔ Доступ запрещён.")
+        return
+    # Если уже включён, показываем статус
+    if maintenance_mode:
+        if maintenance_until:
+            until_str = maintenance_until.strftime("%d.%m.%Y %H:%M")
+            await message.answer(
+                f"🛠 Режим ТО уже включён до {until_str}.\n"
+                "Чтобы отключить сейчас, отправьте `off`."
+            )
+        else:
+            await message.answer(
+                "🛠 Режим ТО включён (без таймера).\n"
+                "Чтобы отключить, отправьте `off`."
+            )
+        await state.set_state(MaintenanceStates.waiting_for_duration)
+        return
+
+    await state.set_state(MaintenanceStates.waiting_for_duration)
+    await message.answer(
+        "🛠 Введите длительность режима ТО в часах (например, `2`) или `off` для отключения."
+    )
+
+@dp.message(lambda msg: msg.text == "🛠 Режим ТО")
+async def maintenance_button(message: types.Message, state: FSMContext):
+    await maintenance_command(message, state)
+
+@dp.message(StateFilter(MaintenanceStates.waiting_for_duration))
+async def process_maintenance_duration(message: types.Message, state: FSMContext):
+    if message.from_user.id not in admin_users:
+        await message.answer("⛔ Доступ запрещён.")
+        await state.clear()
+        return
+
+    text = message.text.strip().lower()
+    if text == "off":
+        # Выключение режима
+        global maintenance_mode, maintenance_until
+        maintenance_mode = False
+        maintenance_until = None
+        await state.clear()
+        await message.answer("✅ Режим ТО отключён.", reply_markup=admin_kb)
+        # Уведомляем всех админов (опционально)
+        for admin_id in admin_users:
+            try:
+                await bot.send_message(admin_id, "🔔 Режим ТО отключён администратором.")
+            except Exception:
+                pass
+        return
+
+    try:
+        hours = float(text)
+        if hours <= 0:
+            await message.answer("❌ Введите положительное число часов.")
+            return
+        # Включаем режим
+        global maintenance_mode, maintenance_until
+        maintenance_mode = True
+        maintenance_until = datetime.datetime.now() + datetime.timedelta(hours=hours)
+        await state.clear()
+        await message.answer(
+            f"🛠 Режим ТО включён на {hours} ч.\n"
+            f"Автоматическое отключение в {maintenance_until.strftime('%H:%M %d.%m.%Y')}.",
+            reply_markup=admin_kb
+        )
+        # Уведомляем всех админов
+        for admin_id in admin_users:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"🛠 Включён режим ТО на {hours} ч. (до {maintenance_until.strftime('%H:%M %d.%m.%Y')})"
+                )
+            except Exception:
+                pass
+        # Запускаем таймер автоматического отключения
+        asyncio.create_task(auto_disable_maintenance(hours))
+    except ValueError:
+        await message.answer("❌ Введите число (часы) или `off`.")
+
+async def auto_disable_maintenance(hours: float):
+    """Автоматически отключает режим ТО через заданное количество часов."""
+    await asyncio.sleep(hours * 3600)  # переводим часы в секунды
+    global maintenance_mode, maintenance_until
+    if maintenance_mode and maintenance_until and datetime.datetime.now() >= maintenance_until:
+        maintenance_mode = False
+        maintenance_until = None
+        logger.info("Режим ТО автоматически отключён по таймеру.")
+        # Уведомляем админов
+        for admin_id in admin_users:
+            try:
+                await bot.send_message(admin_id, "🔔 Режим ТО автоматически отключён (время истекло).")
+            except Exception:
+                pass
+
 # ---------- Обработка обычных текстовых сообщений (не команд) ----------
 @dp.message()
 async def handle_other_messages(message: types.Message, state: FSMContext):
-    # Добавляем пользователя в общий список при любом текстовом сообщении
+    # Проверяем режим ТО для всех, кроме админов
+    if await check_maintenance(message):
+        return
+
     all_users.add(message.from_user.id)
 
     if message.text and message.text.startswith("/"):
@@ -274,6 +404,8 @@ async def handle_other_messages(message: types.Message, state: FSMContext):
 # ---------- /help ----------
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
+    if await check_maintenance(message):
+        return
     all_users.add(message.from_user.id)
     await message.answer(
         "📖 Доступные команды:\n"
@@ -282,6 +414,7 @@ async def cmd_help(message: types.Message):
         "/logout — выйти из админ-режима\n"
         "/feedback — оставить отзыв\n"
         "/broadcast — отправить рассылку (только для админов)\n"
+        "/maintenance — управление режимом ТО (только для админов)\n"
         "/help — эта справка\n\n"
         "📱 Для работы с ИИ используйте Gehenna App."
     )
