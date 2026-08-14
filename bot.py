@@ -9,50 +9,41 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from dotenv import load_dotenv
 
-# ---------- Настройка логирования ----------
+# ---------- Настройка ----------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---------- Загрузка переменных ----------
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("Токен основного бота не найден в переменных окружения")
+    raise ValueError("Токен не найден")
 
-# ---------- Адрес Cloudflare Worker ----------
 BOT_API_BASE_URL = "https://round-hill-9d0b.fedorbolgarov2.workers.dev"
 
-# ---------- Хранилище состояний и бот ----------
+# ---------- Хранилище и бот ----------
 storage = MemoryStorage()
 bot = Bot(token=BOT_TOKEN, base_url=BOT_API_BASE_URL)
 dp = Dispatcher(storage=storage)
 
-# ===================== FSM ДЛЯ FEEDBACK =====================
+# ---------- Секретный код ----------
+ADMIN_SECRET_CODE = "5545z"
+
+# ---------- Хранилища ----------
+admin_users = set()      # user_id администраторов
+all_users = set()        # все пользователи, кто взаимодействовал с ботом
+
+# ---------- FSM состояния ----------
+class AdminAuth(StatesGroup):
+    waiting_for_code = State()
+
 class FeedbackStates(StatesGroup):
-    waiting_for_feedback = State()  # ожидаем текст отзыва
+    waiting_for_text = State()
 
-# Хранилище отзывов (в памяти, для заглушки)
-feedbacks = []
+class BroadcastStates(StatesGroup):
+    waiting_for_text = State()   # для ввода текста рассылки
 
-# ===================== ОБРАБОТЧИК ОШИБОК =====================
-@dp.errors()
-async def handle_errors(update: types.Update, exception: Exception) -> bool:
-    logger.error(f"Произошла ошибка: {exception}", exc_info=True)
-    chat_id = None
-    if update.message:
-        chat_id = update.message.chat.id
-    elif update.callback_query:
-        chat_id = update.callback_query.message.chat.id
-    elif update.inline_query:
-        return True
-    if chat_id:
-        try:
-            await bot.send_message(chat_id, "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\nприносим свои извинения.")
-        except Exception:
-            pass
-    return True
-
-# ===================== КЛАВИАТУРА =====================
+# ---------- Клавиатуры ----------
+# Обычная (для всех)
 webapp_btn = KeyboardButton(
     text="📱 Открыть приложение",
     web_app=WebAppInfo(url="https://Krasatulkk.github.io/ZERG/")
@@ -60,7 +51,21 @@ webapp_btn = KeyboardButton(
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
         [webapp_btn],
+        [KeyboardButton(text="📝 Отправить отзыв")],
+        [KeyboardButton(text="🔐 Войти как администратор")],
         [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="📖 О боте")]
+    ],
+    resize_keyboard=True
+)
+
+# Админская (добавлена кнопка рассылки)
+admin_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [webapp_btn],
+        [KeyboardButton(text="📝 Отправить отзыв")],
+        [KeyboardButton(text="📢 Отправить рассылку")],
+        [KeyboardButton(text="🚪 Выйти из админ-режима")],
+        [KeyboardButton(text="ℹ️ Помощь")]
     ],
     resize_keyboard=True
 )
@@ -75,115 +80,216 @@ async def send_and_store(chat_id: int, text: str, **kwargs):
         bot_messages.pop(0)
     return sent
 
-# ===================== ОБРАБОТЧИКИ КОМАНД =====================
+# ---------- Обработчик ошибок ----------
+@dp.errors()
+async def handle_errors(update: types.Update, exception: Exception) -> bool:
+    logger.error(f"Ошибка: {exception}", exc_info=True)
+    return True
+
+# ---------- /start ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
+    # Добавляем пользователя в общий список
+    all_users.add(message.from_user.id)
     await message.answer(
-        "Вас приветствует Gehenna AI 👋,\nАнализирую, предсказываю, созидаю.",
+        "👋 Вас приветствует Gehenna AI!\n"
+        "Вы в обычном режиме. Для доступа к админ-панели нажмите «Войти как администратор».\n\n"
+        "📱 Скачайте Gehenna App для полного функционала: [ссылка на приложение]",
         reply_markup=main_kb
     )
 
-@dp.message(Command("help"))
-async def cmd_help(message: types.Message):
-    await message.answer(
-        "📖 Доступные команды:\n"
-        "/start — приветствие\n"
-        "/about — о возможностях Gehenna AI\n"
-        "/capabilities — то же, что /about\n"
-        "/feedback — оставить отзыв или пожелание\n"
-        "/reset — сбросить диалог и очистить чат (удалить мои сообщения)"
-    )
+# ---------- /admin и кнопка входа ----------
+@dp.message(Command("admin"))
+async def cmd_admin(message: types.Message, state: FSMContext):
+    if message.from_user.id in admin_users:
+        await message.answer("✅ Вы уже вошли как администратор.", reply_markup=admin_kb)
+        return
+    await state.set_state(AdminAuth.waiting_for_code)
+    await message.answer("🔑 Введите секретный код доступа:")
 
-@dp.message(Command("about"))
-async def cmd_about(message: types.Message):
-    await message.answer(
-        "Возможности Gehenna AI безграничны! ZERG создали лучший ИИ."
-    )
+@dp.message(lambda msg: msg.text == "🔐 Войти как администратор")
+async def admin_button(message: types.Message, state: FSMContext):
+    await cmd_admin(message, state)
 
-@dp.message(Command("capabilities"))
-async def cmd_capabilities(message: types.Message):
-    await message.answer(
-        "Возможности Gehenna AI безграничны! ZERG создали лучший ИИ."
-    )
+# ---------- Проверка кода ----------
+@dp.message(StateFilter(AdminAuth.waiting_for_code))
+async def process_admin_code(message: types.Message, state: FSMContext):
+    code = message.text.strip()
+    if code == ADMIN_SECRET_CODE:
+        admin_users.add(message.from_user.id)
+        all_users.add(message.from_user.id)  # админ тоже пользователь
+        await state.clear()
+        await message.answer(
+            "✅ Доступ предоставлен! Теперь вы администратор.",
+            reply_markup=admin_kb
+        )
+        logger.info(f"Администратор вошёл: {message.from_user.id}")
+    else:
+        await message.answer("❌ Неверный код. Попробуйте ещё раз или /cancel.")
 
-@dp.message(Command("reset"))
-async def cmd_reset(message: types.Message, state: FSMContext):
-    await state.clear()
-    deleted = 0
-    to_delete = bot_messages[-10:]
-    for msg_id in reversed(to_delete):
-        try:
-            await bot.delete_message(chat_id=message.chat.id, message_id=msg_id)
-            deleted += 1
-        except Exception:
-            pass
-    bot_messages.clear()
-    await message.answer(
-        f"🔄 Диалог сброшен. Удалено {deleted} моих сообщений.\nНачинаем заново!",
-        reply_markup=main_kb
-    )
+# ---------- /logout и кнопка выхода ----------
+@dp.message(Command("logout"))
+async def cmd_logout(message: types.Message, state: FSMContext):
+    if message.from_user.id in admin_users:
+        admin_users.remove(message.from_user.id)
+        await state.clear()
+        await message.answer(
+            "🚪 Вы вышли из админ-режима.",
+            reply_markup=main_kb
+        )
+        logger.info(f"Администратор вышел: {message.from_user.id}")
+    else:
+        await message.answer("Вы не были в админ-режиме.")
 
-# ---------- Обработчик команды /feedback ----------
+@dp.message(lambda msg: msg.text == "🚪 Выйти из админ-режима")
+async def logout_button(message: types.Message, state: FSMContext):
+    await cmd_logout(message, state)
+
+# ---------- Обработка отзыва (для всех) ----------
 @dp.message(Command("feedback"))
-async def cmd_feedback(message: types.Message, state: FSMContext):
-    await state.set_state(FeedbackStates.waiting_for_feedback)
+async def feedback_command(message: types.Message, state: FSMContext):
+    all_users.add(message.from_user.id)
+    await state.set_state(FeedbackStates.waiting_for_text)
     await message.answer(
         "📝 Напишите ваш отзыв или пожелание. Мы очень ценим ваше мнение!"
     )
 
-@dp.message(StateFilter(FeedbackStates.waiting_for_feedback))
+@dp.message(lambda msg: msg.text == "📝 Отправить отзыв")
+async def feedback_button(message: types.Message, state: FSMContext):
+    await feedback_command(message, state)
+
+@dp.message(StateFilter(FeedbackStates.waiting_for_text))
 async def process_feedback(message: types.Message, state: FSMContext):
-    user_text = message.text
-    if not user_text:
+    feedback_text = message.text
+    if not feedback_text:
         await message.answer("Пожалуйста, напишите текст отзыва.")
         return
-    # Сохраняем отзыв (заглушка – в список)
-    feedbacks.append({
-        "user_id": message.from_user.id,
-        "username": message.from_user.username or "без_имени",
-        "text": user_text,
-        "date": message.date
-    })
-    logger.info(f"Новый отзыв от {message.from_user.id}: {user_text}")
-    await state.clear()
-    await message.answer(
-        "🙏 Спасибо за ваш отзыв! Он очень важен для ZERG.",
-        reply_markup=main_kb
-    )
 
-# ---------- Универсальный обработчик всех остальных сообщений ----------
+    user_id = message.from_user.id
+    username = message.from_user.username or "без_имени"
+    full_name = message.from_user.full_name or "не указан"
+
+    # Сохраняем отзыв (заглушка – можно заменить на запись в БД)
+    logger.info(f"Отзыв от {user_id} ({username}): {feedback_text}")
+
+    # Отправляем отзыв всем администраторам
+    if admin_users:
+        sent_count = 0
+        for admin_id in admin_users:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"📩 **Новый отзыв!**\n\n"
+                    f"👤 Пользователь: {full_name} (@{username})\n"
+                    f"🆔 ID: {user_id}\n"
+                    f"📝 Текст:\n{feedback_text}"
+                )
+                sent_count += 1
+            except Exception as e:
+                logger.error(f"Не удалось отправить отзыв админу {admin_id}: {e}")
+        await message.answer(
+            f"🙏 Спасибо за ваш отзыв! Он был отправлен {sent_count} администраторам.\n"
+            "Ваше мнение очень важно для ZERG."
+        )
+    else:
+        await message.answer(
+            "🙏 Спасибо за ваш отзыв! К сожалению, сейчас нет активных администраторов, но мы обязательно его учтём."
+        )
+
+    await state.clear()
+
+# ---------- РАССЫЛКА (только для администраторов) ----------
+@dp.message(Command("broadcast"))
+async def broadcast_command(message: types.Message, state: FSMContext):
+    if message.from_user.id not in admin_users:
+        await message.answer("⛔ Доступ запрещён. Вы не администратор.")
+        return
+    await state.set_state(BroadcastStates.waiting_for_text)
+    await message.answer("📢 Введите текст сообщения для рассылки всем пользователям:")
+
+@dp.message(lambda msg: msg.text == "📢 Отправить рассылку")
+async def broadcast_button(message: types.Message, state: FSMContext):
+    await broadcast_command(message, state)
+
+@dp.message(StateFilter(BroadcastStates.waiting_for_text))
+async def process_broadcast(message: types.Message, state: FSMContext):
+    broadcast_text = message.text
+    if not broadcast_text:
+        await message.answer("Пожалуйста, введите текст для рассылки.")
+        return
+
+    # Отправляем сообщение всем пользователям
+    total = len(all_users)
+    if total == 0:
+        await message.answer("Нет пользователей для рассылки.")
+        await state.clear()
+        return
+
+    await message.answer(f"⏳ Начинаю рассылку для {total} пользователей...")
+
+    success_count = 0
+    fail_count = 0
+    for user_id in all_users:
+        try:
+            # Формируем сообщение
+            text_to_send = f"📢 **Я СЛЫШУ ГОЛОС БОГА:**\n\n{broadcast_text}"
+            await bot.send_message(user_id, text_to_send)
+            success_count += 1
+            # Небольшая задержка, чтобы не превысить лимиты Telegram
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            fail_count += 1
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
+
+    await message.answer(
+        f"✅ Рассылка завершена!\n"
+        f"📨 Успешно отправлено: {success_count}\n"
+        f"❌ Не удалось отправить: {fail_count}"
+    )
+    await state.clear()
+
+# ---------- Обработка обычных текстовых сообщений (не команд) ----------
 @dp.message()
-async def handle_message(message: types.Message, state: FSMContext):
-    # Данные из Mini App
-    if message.web_app_data:
-        data = message.web_app_data.data
-        await message.answer(f"📩 Данные из Mini App: {data}")
+async def handle_other_messages(message: types.Message, state: FSMContext):
+    # Добавляем пользователя в общий список при любом текстовом сообщении
+    all_users.add(message.from_user.id)
+
+    if message.text and message.text.startswith("/"):
+        await message.answer("🔧 Неизвестная команда. Используйте /help.")
         return
 
     if message.text:
-        # Если это команда (начинается с "/"), но не обработана выше – заглушка
-        if message.text.startswith("/"):
+        if message.from_user.id in admin_users:
             await message.answer(
-                "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\nприносим свои извинения."
+                "📱 В админ-режиме вы можете использовать кнопки меню.\n"
+                "Для работы с ИИ используйте Gehenna App."
             )
         else:
-            # Обычный текст
-            user_text = message.text
             await message.answer(
-                f"❓ Вы задали вопрос: «{user_text}»\n\n"
-                "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ,\n"
-                "приносим свои извинения."
+                "📱 Функция вопросов отключена. Скачайте Gehenna App для полного доступа.\n"
+                "Ссылка: [вставьте ссылку на ваше приложение]"
             )
 
-# ---------- Основная функция ----------
+# ---------- /help ----------
+@dp.message(Command("help"))
+async def cmd_help(message: types.Message):
+    all_users.add(message.from_user.id)
+    await message.answer(
+        "📖 Доступные команды:\n"
+        "/start — приветствие\n"
+        "/admin — войти как администратор (ввести код)\n"
+        "/logout — выйти из админ-режима\n"
+        "/feedback — оставить отзыв\n"
+        "/broadcast — отправить рассылку (только для админов)\n"
+        "/help — эта справка\n\n"
+        "📱 Для работы с ИИ используйте Gehenna App."
+    )
+
+# ---------- Запуск ----------
 async def main():
-    logger.info("🤖 Бот запущен через Cloudflare Worker!")
+    logger.info("🤖 Бот запущен")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        logger.error(f"Критическая ошибка: {e}")
-        raise
+    asyncio.run(main())
