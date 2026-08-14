@@ -316,15 +316,16 @@ async def process_maintenance_duration(message: types.Message, state: FSMContext
         await state.clear()
         return
 
+    # Объявляем глобальные переменные в самом начале функции
+    global maintenance_mode, maintenance_until
+
     text = message.text.strip().lower()
     if text == "off":
-        # Выключение режима
-        global maintenance_mode, maintenance_until
         maintenance_mode = False
         maintenance_until = None
         await state.clear()
         await message.answer("✅ Режим ТО отключён.", reply_markup=admin_kb)
-        # Уведомляем всех админов (опционально)
+        # Уведомляем всех админов
         for admin_id in admin_users:
             try:
                 await bot.send_message(admin_id, "🔔 Режим ТО отключён администратором.")
@@ -337,8 +338,6 @@ async def process_maintenance_duration(message: types.Message, state: FSMContext
         if hours <= 0:
             await message.answer("❌ Введите положительное число часов.")
             return
-        # Включаем режим
-        global maintenance_mode, maintenance_until
         maintenance_mode = True
         maintenance_until = datetime.datetime.now() + datetime.timedelta(hours=hours)
         await state.clear()
@@ -347,7 +346,6 @@ async def process_maintenance_duration(message: types.Message, state: FSMContext
             f"Автоматическое отключение в {maintenance_until.strftime('%H:%M %d.%m.%Y')}.",
             reply_markup=admin_kb
         )
-        # Уведомляем всех админов
         for admin_id in admin_users:
             try:
                 await bot.send_message(
@@ -362,14 +360,13 @@ async def process_maintenance_duration(message: types.Message, state: FSMContext
         await message.answer("❌ Введите число (часы) или `off`.")
 
 async def auto_disable_maintenance(hours: float):
-    """Автоматически отключает режим ТО через заданное количество часов."""
-    await asyncio.sleep(hours * 3600)  # переводим часы в секунды
+    # Объявляем глобальные переменные в начале функции
     global maintenance_mode, maintenance_until
+    await asyncio.sleep(hours * 3600)  # переводим часы в секунды
     if maintenance_mode and maintenance_until and datetime.datetime.now() >= maintenance_until:
         maintenance_mode = False
         maintenance_until = None
         logger.info("Режим ТО автоматически отключён по таймеру.")
-        # Уведомляем админов
         for admin_id in admin_users:
             try:
                 await bot.send_message(admin_id, "🔔 Режим ТО автоматически отключён (время истекло).")
