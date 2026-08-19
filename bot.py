@@ -29,7 +29,7 @@ storage = MemoryStorage()
 bot = Bot(token=BOT_TOKEN, base_url=BOT_API_BASE_URL)
 dp = Dispatcher(storage=storage)
 
-# ---------- Секретный код ----------
+# ---------- Секретный код (исправлен) ----------
 ADMIN_SECRET_CODE = "5545z"
 
 # ---------- Хранилища ----------
@@ -38,7 +38,7 @@ admin_info = {}              # {user_id: (username, full_name)}
 all_users = set()            # все пользователи
 maintenance_mode = False
 maintenance_until = None
-feedbacks = []               # список отзывов: {user_id, username, full_name, text, timestamp}
+feedbacks = []               # список отзывов
 
 # ---------- FSM состояния ----------
 class AdminAuth(StatesGroup):
@@ -46,7 +46,7 @@ class AdminAuth(StatesGroup):
 
 class FeedbackStates(StatesGroup):
     waiting_for_text = State()
-    waiting_confirm = State()   # для подтверждения отправки отзыва
+    waiting_confirm = State()
 
 class BroadcastStates(StatesGroup):
     waiting_for_text = State()
@@ -56,10 +56,9 @@ class MaintenanceStates(StatesGroup):
     waiting_for_duration = State()
 
 class ClearFeedbackStates(StatesGroup):
-    waiting_confirm = State()   # для подтверждения очистки отзывов
+    waiting_confirm = State()
 
 # ---------- Клавиатуры ----------
-# Убрали кнопку "Помощь" и добавили "Отзывы" только для админов
 webapp_btn = KeyboardButton(
     text="📱 Открыть приложение",
     web_app=WebAppInfo(url="https://Krasatulkk.github.io/ZERG/")
@@ -69,8 +68,7 @@ main_kb = ReplyKeyboardMarkup(
     keyboard=[
         [webapp_btn],
         [KeyboardButton(text="📝 Отправить отзыв")],
-        [KeyboardButton(text="🔐 Войти как администратор")],
-        [KeyboardButton(text="📖 О боте")]  # оставили "О боте" (используется для /about)
+        [KeyboardButton(text="📖 О боте")]
     ],
     resize_keyboard=True
 )
@@ -80,7 +78,7 @@ admin_kb = ReplyKeyboardMarkup(
         [webapp_btn],
         [KeyboardButton(text="📝 Отправить отзыв")],
         [KeyboardButton(text="📢 Отправить рассылку")],
-        [KeyboardButton(text="📋 Отзывы")],          # новая кнопка для просмотра отзывов
+        [KeyboardButton(text="📋 Отзывы")],
         [KeyboardButton(text="👥 Список админов")],
         [KeyboardButton(text="🛠 Режим ТО")],
         [KeyboardButton(text="🚪 Выйти из админ-режима")]
@@ -90,24 +88,18 @@ admin_kb = ReplyKeyboardMarkup(
 
 # ---------- Inline-клавиатуры ----------
 confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(text="✅ Отправить", callback_data="confirm_broadcast"),
-        InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_broadcast")
-    ]
+    [InlineKeyboardButton(text="✅ Отправить", callback_data="confirm_broadcast"),
+     InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_broadcast")]
 ])
 
 confirm_feedback_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(text="✅ Отправить", callback_data="confirm_feedback"),
-        InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_feedback")
-    ]
+    [InlineKeyboardButton(text="✅ Отправить", callback_data="confirm_feedback"),
+     InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_feedback")]
 ])
 
 clear_feedback_confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(text="✅ Да, очистить", callback_data="confirm_clear_feedbacks"),
-        InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_clear_feedbacks")
-    ]
+    [InlineKeyboardButton(text="✅ Да, очистить", callback_data="confirm_clear_feedbacks"),
+     InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_clear_feedbacks")]
 ])
 
 # ---------- Глобальный список для /reset ----------
@@ -150,38 +142,23 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     await message.answer(
         "👋 Вас приветствует Gehenna AI!\n\n"
-        "Вы в обычном режиме. Для доступа к админ-панели нажмите «Войти как администратор».\n\n"
+        "Для доступа к админ-панели введите команду /startzerg\n\n"
         "📱 Скачайте Gehenna App для полного функционала: [ссылка на приложение]",
         reply_markup=kb
     )
 
-# ---------- /app ----------
-@dp.message(Command("app"))
-async def cmd_app(message: types.Message):
-    if await check_maintenance(message):
-        return
-    kb = admin_kb if message.from_user.id in admin_users else main_kb
-    await message.answer(
-        "📱 Кнопка для открытия приложения:",
-        reply_markup=kb
-    )
-
-# ---------- /admin и кнопка входа ----------
-@dp.message(Command("admin"))
-async def cmd_admin(message: types.Message, state: FSMContext):
+# ---------- /startzerg (вход в админ-режим) ----------
+@dp.message(Command("startzerg"))
+async def cmd_startzerg(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
         return
     if message.from_user.id in admin_users:
-        await message.answer("✅ Вы уже вошли как администратор.", reply_markup=admin_kb)
+        await message.answer("✅ Вы уже в режиме БОГА.")
         return
     await state.set_state(AdminAuth.waiting_for_code)
-    await message.answer("🔑 Введите секретный код доступа:")
+    await message.answer("🔑 Введите пароль для входа в режим БОГА:")
 
-@dp.message(lambda msg: msg.text == "🔐 Войти как администратор")
-async def admin_button(message: types.Message, state: FSMContext):
-    await cmd_admin(message, state)
-
-# ---------- Проверка кода ----------
+# ---------- Проверка пароля ----------
 @dp.message(StateFilter(AdminAuth.waiting_for_code))
 async def process_admin_code(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
@@ -194,12 +171,12 @@ async def process_admin_code(message: types.Message, state: FSMContext):
         admin_info[user_id] = (message.from_user.username or "без_имени", message.from_user.full_name or "не указан")
         await state.clear()
         await message.answer(
-            "✅ Доступ предоставлен! Теперь вы администратор.",
+            "✅ Доступ предоставлен! Вы вошли в режим БОГА.",
             reply_markup=admin_kb
         )
         logger.info(f"Администратор вошёл: {user_id}")
     else:
-        await message.answer("❌ Неверный код. Попробуйте ещё раз или /cancel.")
+        await message.answer("❌ Неверный пароль. Попробуйте ещё раз или /cancel.")
 
 # ---------- /logout и кнопка выхода ----------
 @dp.message(Command("logout"))
@@ -213,12 +190,12 @@ async def cmd_logout(message: types.Message, state: FSMContext):
             del admin_info[user_id]
         await state.clear()
         await message.answer(
-            "🚪 Вы вышли из админ-режима.",
+            "🚪 Вы вышли из режима БОГА.",
             reply_markup=main_kb
         )
         logger.info(f"Администратор вышел: {user_id}")
     else:
-        await message.answer("Вы не были в админ-режиме.")
+        await message.answer("Вы не в режиме БОГА.")
 
 @dp.message(lambda msg: msg.text == "🚪 Выйти из админ-режима")
 async def logout_button(message: types.Message, state: FSMContext):
@@ -228,7 +205,7 @@ async def logout_button(message: types.Message, state: FSMContext):
 @dp.message(Command("admin_list"))
 async def cmd_admin_list(message: types.Message):
     if message.from_user.id not in admin_users:
-        await message.answer("⛔ Доступ запрещён. Вы не администратор.")
+        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
         return
     if not admin_info:
         await message.answer("👥 В данный момент нет активных администраторов.")
@@ -250,22 +227,18 @@ async def admin_list_button(message: types.Message):
     await cmd_admin_list(message)
 
 # ---------- ОТЗЫВЫ ----------
-# Команда для отправки отзыва
 @dp.message(Command("feedback"))
 async def feedback_command(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
         return
     all_users.add(message.from_user.id)
     await state.set_state(FeedbackStates.waiting_for_text)
-    await message.answer(
-        "📝 Напишите ваш отзыв или пожелание. Мы очень ценим ваше мнение!"
-    )
+    await message.answer("📝 Напишите ваш отзыв или пожелание. Мы очень ценим ваше мнение!")
 
 @dp.message(lambda msg: msg.text == "📝 Отправить отзыв")
 async def feedback_button(message: types.Message, state: FSMContext):
     await feedback_command(message, state)
 
-# Приём текста отзыва
 @dp.message(StateFilter(FeedbackStates.waiting_for_text))
 async def process_feedback_text(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
@@ -275,7 +248,6 @@ async def process_feedback_text(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, напишите текст отзыва.")
         return
 
-    # Сохраняем текст и предлагаем подтверждение
     await state.update_data(feedback_text=text)
     await state.set_state(FeedbackStates.waiting_confirm)
 
@@ -284,7 +256,6 @@ async def process_feedback_text(message: types.Message, state: FSMContext):
         reply_markup=confirm_feedback_kb
     )
 
-# Обработка подтверждения отзыва
 @dp.callback_query(lambda c: c.data == "confirm_feedback")
 async def confirm_feedback(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
@@ -295,7 +266,6 @@ async def confirm_feedback(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
-    # Сохраняем отзыв
     feedbacks.append({
         "user_id": user_id,
         "username": callback.from_user.username or "без_имени",
@@ -305,7 +275,6 @@ async def confirm_feedback(callback: types.CallbackQuery, state: FSMContext):
     })
     logger.info(f"Новый отзыв от {user_id}: {feedback_text}")
 
-    # Отправляем уведомления админам
     if admin_users:
         sent_count = 0
         for admin_id in admin_users:
@@ -333,25 +302,23 @@ async def confirm_feedback(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
 
-# Отмена отправки отзыва
 @dp.callback_query(lambda c: c.data == "cancel_feedback")
 async def cancel_feedback(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Отправка отзыва отменена.")
     await callback.answer()
 
-# ---------- ПРОСМОТР ОТЗЫВОВ (для админов) ----------
+# ---------- ПРОСМОТР ОТЗЫВОВ ----------
 @dp.message(Command("feedbacks"))
 async def cmd_feedbacks(message: types.Message):
     if message.from_user.id not in admin_users:
-        await message.answer("⛔ Доступ запрещён. Вы не администратор.")
+        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
         return
 
     if not feedbacks:
         await message.answer("📋 Отзывов пока нет.")
         return
 
-    # Формируем список
     lines = []
     for i, fb in enumerate(feedbacks, 1):
         dt = fb['timestamp'].strftime("%d.%m.%Y %H:%M")
@@ -362,7 +329,6 @@ async def cmd_feedbacks(message: types.Message):
         )
     text = "📋 **Список отзывов:**\n\n" + "\n".join(lines)
 
-    # Кнопка очистки
     clear_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🗑 Очистить все", callback_data="clear_feedbacks")]
     ])
@@ -373,13 +339,11 @@ async def cmd_feedbacks(message: types.Message):
 async def feedbacks_button(message: types.Message):
     await cmd_feedbacks(message)
 
-# ---------- ОЧИСТКА ОТЗЫВОВ (подтверждение) ----------
 @dp.callback_query(lambda c: c.data == "clear_feedbacks")
 async def clear_feedbacks_request(callback: types.CallbackQuery):
     if callback.from_user.id not in admin_users:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-    # Показываем подтверждение
     await callback.message.edit_text(
         "⚠️ Вы уверены, что хотите удалить **все** отзывы? Это действие необратимо.",
         reply_markup=clear_feedback_confirm_kb
@@ -393,9 +357,8 @@ async def confirm_clear_feedbacks(callback: types.CallbackQuery):
         return
 
     global feedbacks
-    feedbacks = []  # очищаем список
+    feedbacks = []
     await callback.message.edit_text("✅ Все отзывы удалены.")
-    # Уведомляем всех админов
     for admin_id in admin_users:
         try:
             await bot.send_message(admin_id, "🗑 Администратор очистил все отзывы.")
@@ -408,17 +371,183 @@ async def cancel_clear_feedbacks(callback: types.CallbackQuery):
     if callback.from_user.id not in admin_users:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-    # Возвращаем список отзывов
     await cmd_feedbacks(callback.message)
     await callback.answer()
 
-# ---------- РАССЫЛКА (с подтверждением) ----------
-# ... (код рассылки без изменений) ...
-# Оставляем существующий код рассылки (он уже есть в предыдущей версии)
-# Для краткости я не буду его дублировать, но он должен быть добавлен.
+# ---------- РАССЫЛКА ----------
+@dp.message(Command("broadcast"))
+async def broadcast_command(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
+    if message.from_user.id not in admin_users:
+        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
+        return
+    await state.set_state(BroadcastStates.waiting_for_text)
+    await message.answer("📢 Введите текст сообщения для рассылки всем пользователям:")
+
+@dp.message(lambda msg: msg.text == "📢 Отправить рассылку")
+async def broadcast_button(message: types.Message, state: FSMContext):
+    await broadcast_command(message, state)
+
+@dp.message(StateFilter(BroadcastStates.waiting_for_text))
+async def process_broadcast_text(message: types.Message, state: FSMContext):
+    if await check_maintenance(message):
+        return
+    text = message.text
+    if not text:
+        await message.answer("Пожалуйста, введите текст.")
+        return
+
+    await state.update_data(broadcast_text=text)
+    await state.set_state(BroadcastStates.waiting_confirm)
+
+    await message.answer(
+        f"📢 **Предпросмотр рассылки:**\n\n{text}\n\nПодтвердите отправку:",
+        reply_markup=confirm_kb
+    )
+
+@dp.callback_query(lambda c: c.data == "confirm_broadcast")
+async def confirm_broadcast(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in admin_users:
+        await callback.answer("⛔ Доступ запрещён.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    broadcast_text = data.get("broadcast_text")
+    if not broadcast_text:
+        await callback.answer("Ошибка: текст не найден.", show_alert=True)
+        await state.clear()
+        return
+
+    await callback.message.edit_text("⏳ Начинаю рассылку...")
+
+    total = len(all_users)
+    if total == 0:
+        await callback.message.edit_text("Нет пользователей для рассылки.")
+        await state.clear()
+        return
+
+    success_count = 0
+    fail_count = 0
+    for user_id in all_users:
+        try:
+            text_to_send = f"📢 **Я СЛЫШУ ГОЛОС БОГА:**\n\n{broadcast_text}"
+            await bot.send_message(user_id, text_to_send)
+            success_count += 1
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            fail_count += 1
+            logger.warning(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
+
+    await callback.message.edit_text(
+        f"✅ Рассылка завершена!\n"
+        f"📨 Успешно отправлено: {success_count}\n"
+        f"❌ Не удалось отправить: {fail_count}"
+    )
+    await state.clear()
+    await callback.message.answer("Вы вернулись в режим БОГА.", reply_markup=admin_kb)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "cancel_broadcast")
+async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in admin_users:
+        await callback.answer("⛔ Доступ запрещён.", show_alert=True)
+        return
+
+    await state.clear()
+    await callback.message.edit_text("❌ Рассылка отменена.")
+    await callback.message.answer("Вы вернулись в режим БОГА.", reply_markup=admin_kb)
+    await callback.answer()
 
 # ---------- РЕЖИМ ТЕХНИЧЕСКИХ РАБОТ ----------
-# ... (код режима ТО без изменений) ...
+@dp.message(Command("maintenance"))
+async def maintenance_command(message: types.Message, state: FSMContext):
+    if message.from_user.id not in admin_users:
+        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
+        return
+    if maintenance_mode:
+        if maintenance_until:
+            until_str = maintenance_until.strftime("%d.%m.%Y %H:%M")
+            await message.answer(
+                f"🛠 Режим ТО уже включён до {until_str}.\n"
+                "Чтобы отключить сейчас, отправьте `off`."
+            )
+        else:
+            await message.answer(
+                "🛠 Режим ТО включён (без таймера).\n"
+                "Чтобы отключить, отправьте `off`."
+            )
+        await state.set_state(MaintenanceStates.waiting_for_duration)
+        return
+
+    await state.set_state(MaintenanceStates.waiting_for_duration)
+    await message.answer(
+        "🛠 Введите длительность режима ТО в часах (например, `2`) или `off` для отключения."
+    )
+
+@dp.message(lambda msg: msg.text == "🛠 Режим ТО")
+async def maintenance_button(message: types.Message, state: FSMContext):
+    await maintenance_command(message, state)
+
+@dp.message(StateFilter(MaintenanceStates.waiting_for_duration))
+async def process_maintenance_duration(message: types.Message, state: FSMContext):
+    if message.from_user.id not in admin_users:
+        await message.answer("⛔ Доступ запрещён.")
+        await state.clear()
+        return
+
+    global maintenance_mode, maintenance_until
+
+    text = message.text.strip().lower()
+    if text == "off":
+        maintenance_mode = False
+        maintenance_until = None
+        await state.clear()
+        await message.answer("✅ Режим ТО отключён.", reply_markup=admin_kb)
+        for admin_id in admin_users:
+            try:
+                await bot.send_message(admin_id, "🔔 Режим ТО отключён администратором.")
+            except Exception:
+                pass
+        return
+
+    try:
+        hours = float(text)
+        if hours <= 0:
+            await message.answer("❌ Введите положительное число часов.")
+            return
+        maintenance_mode = True
+        maintenance_until = datetime.datetime.now() + datetime.timedelta(hours=hours)
+        await state.clear()
+        await message.answer(
+            f"🛠 Режим ТО включён на {hours} ч.\n"
+            f"Автоматическое отключение в {maintenance_until.strftime('%H:%M %d.%m.%Y')}.",
+            reply_markup=admin_kb
+        )
+        for admin_id in admin_users:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"🛠 Включён режим ТО на {hours} ч. (до {maintenance_until.strftime('%H:%M %d.%m.%Y')})"
+                )
+            except Exception:
+                pass
+        asyncio.create_task(auto_disable_maintenance(hours))
+    except ValueError:
+        await message.answer("❌ Введите число (часы) или `off`.")
+
+async def auto_disable_maintenance(hours: float):
+    global maintenance_mode, maintenance_until
+    await asyncio.sleep(hours * 3600)
+    if maintenance_mode and maintenance_until and datetime.datetime.now() >= maintenance_until:
+        maintenance_mode = False
+        maintenance_until = None
+        logger.info("Режим ТО автоматически отключён по таймеру.")
+        for admin_id in admin_users:
+            try:
+                await bot.send_message(admin_id, "🔔 Режим ТО автоматически отключён (время истекло).")
+            except Exception:
+                pass
 
 # ---------- Обработка обычных текстовых сообщений ----------
 @dp.message()
@@ -428,11 +557,8 @@ async def handle_other_messages(message: types.Message, state: FSMContext):
 
     all_users.add(message.from_user.id)
 
-    # Обработка данных из Mini App (новая кнопка)
     if message.web_app_data:
-        data = message.web_app_data.data
-        # Отправляем то же сообщение пользователю
-        await message.answer(data)
+        await message.answer(message.web_app_data.data)
         return
 
     if message.text and message.text.startswith("/"):
@@ -442,7 +568,7 @@ async def handle_other_messages(message: types.Message, state: FSMContext):
     if message.text:
         if message.from_user.id in admin_users:
             await message.answer(
-                "📱 В админ-режиме вы можете использовать кнопки меню.\n"
+                "📱 В режиме БОГА вы можете использовать кнопки меню.\n"
                 "Для работы с ИИ используйте Gehenna App."
             )
         else:
@@ -451,12 +577,12 @@ async def handle_other_messages(message: types.Message, state: FSMContext):
                 "Ссылка: [вставьте ссылку на ваше приложение]"
             )
 
-# ---------- /about (изменённая) ----------
+# ---------- /about ----------
 @dp.message(Command("about"))
 async def cmd_about(message: types.Message):
     await message.answer("Gehenna AI by ZERG - Gehenna App")
 
-# ---------- /help (обновлённая, без кнопки помощи) ----------
+# ---------- /help ----------
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
     if await check_maintenance(message):
@@ -465,13 +591,13 @@ async def cmd_help(message: types.Message):
     await message.answer(
         "📖 Доступные команды:\n"
         "/start — приветствие\n"
-        "/admin — войти как администратор (ввести код)\n"
-        "/logout — выйти из админ-режима\n"
-        "/admin_list — список активных администраторов (только для админов)\n"
+        "/startzerg — войти в режим БОГА (ввести пароль)\n"
+        "/logout — выйти из режима БОГА\n"
+        "/admin_list — список активных администраторов (только для БОГОВ)\n"
         "/feedback — оставить отзыв\n"
-        "/broadcast — отправить рассылку (только для админов)\n"
-        "/feedbacks — просмотреть отзывы (только для админов)\n"
-        "/maintenance — управление режимом ТО (только для админов)\n"
+        "/broadcast — отправить рассылку (только для БОГОВ)\n"
+        "/feedbacks — просмотреть отзывы (только для БОГОВ)\n"
+        "/maintenance — управление режимом ТО (только для БОГОВ)\n"
         "/app — показать кнопку приложения\n"
         "/about — информация о боте\n"
         "/help — эта справка\n\n"
