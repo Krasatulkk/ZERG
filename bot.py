@@ -29,7 +29,7 @@ storage = MemoryStorage()
 bot = Bot(token=BOT_TOKEN, base_url=BOT_API_BASE_URL)
 dp = Dispatcher(storage=storage)
 
-# ---------- Секретный код (исправлен) ----------
+# ---------- Секретный код ----------
 ADMIN_SECRET_CODE = "5545z"
 
 # ---------- Хранилища ----------
@@ -38,7 +38,7 @@ admin_info = {}              # {user_id: (username, full_name)}
 all_users = set()            # все пользователи
 maintenance_mode = False
 maintenance_until = None
-feedbacks = []               # список отзывов
+feedbacks = []
 
 # ---------- FSM состояния ----------
 class AdminAuth(StatesGroup):
@@ -130,7 +130,7 @@ async def check_maintenance(message: types.Message) -> bool:
         return True
     return False
 
-# ---------- /start ----------
+# ---------- /start (без упоминания /startzerg) ----------
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
@@ -142,12 +142,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     await message.answer(
         "👋 Вас приветствует Gehenna AI!\n\n"
-        "Для доступа к админ-панели введите команду /startzerg\n\n"
         "📱 Скачайте Gehenna App для полного функционала: [ссылка на приложение]",
         reply_markup=kb
     )
 
-# ---------- /startzerg (вход в админ-режим) ----------
+# ---------- /startzerg (скрытая команда) ----------
 @dp.message(Command("startzerg"))
 async def cmd_startzerg(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
@@ -178,7 +177,7 @@ async def process_admin_code(message: types.Message, state: FSMContext):
     else:
         await message.answer("❌ Неверный пароль. Попробуйте ещё раз или /cancel.")
 
-# ---------- /logout и кнопка выхода ----------
+# ---------- /logout ----------
 @dp.message(Command("logout"))
 async def cmd_logout(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
@@ -205,7 +204,7 @@ async def logout_button(message: types.Message, state: FSMContext):
 @dp.message(Command("admin_list"))
 async def cmd_admin_list(message: types.Message):
     if message.from_user.id not in admin_users:
-        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
+        await message.answer("⛔ Доступ запрещён.")
         return
     if not admin_info:
         await message.answer("👥 В данный момент нет активных администраторов.")
@@ -312,7 +311,7 @@ async def cancel_feedback(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(Command("feedbacks"))
 async def cmd_feedbacks(message: types.Message):
     if message.from_user.id not in admin_users:
-        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
+        await message.answer("⛔ Доступ запрещён.")
         return
 
     if not feedbacks:
@@ -380,7 +379,7 @@ async def broadcast_command(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
         return
     if message.from_user.id not in admin_users:
-        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
+        await message.answer("⛔ Доступ запрещён.")
         return
     await state.set_state(BroadcastStates.waiting_for_text)
     await message.answer("📢 Введите текст сообщения для рассылки всем пользователям:")
@@ -463,7 +462,7 @@ async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(Command("maintenance"))
 async def maintenance_command(message: types.Message, state: FSMContext):
     if message.from_user.id not in admin_users:
-        await message.answer("⛔ Доступ запрещён. Вы не в режиме БОГА.")
+        await message.answer("⛔ Доступ запрещён.")
         return
     if maintenance_mode:
         if maintenance_until:
@@ -582,7 +581,7 @@ async def handle_other_messages(message: types.Message, state: FSMContext):
 async def cmd_about(message: types.Message):
     await message.answer("Gehenna AI by ZERG - Gehenna App")
 
-# ---------- /help ----------
+# ---------- /help (без упоминания /startzerg) ----------
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
     if await check_maintenance(message):
@@ -591,8 +590,7 @@ async def cmd_help(message: types.Message):
     await message.answer(
         "📖 Доступные команды:\n"
         "/start — приветствие\n"
-        "/startzerg — войти в режим БОГА (ввести пароль)\n"
-        "/logout — выйти из режима БОГА\n"
+        "/logout — выйти из режима БОГА (если вы в нём)\n"
         "/admin_list — список активных администраторов (только для БОГОВ)\n"
         "/feedback — оставить отзыв\n"
         "/broadcast — отправить рассылку (только для БОГОВ)\n"
