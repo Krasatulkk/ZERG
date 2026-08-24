@@ -6,10 +6,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import (
-    ReplyKeyboardMarkup, KeyboardButton, WebAppInfo,
-    InlineKeyboardMarkup, InlineKeyboardButton
-)
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 import datetime
 
@@ -22,7 +19,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Токен не найден")
 
-BOT_API_BASE_URL = "https://round-hill-9d0b.fedorbolgarov2.workers.dev"
+BOT_API_BASE_URL = "https://round-hill-9d0b.fedorbolgarov2.workers.dev"  # если нужен прокси
 
 # ---------- Хранилище и бот ----------
 storage = MemoryStorage()
@@ -33,7 +30,7 @@ dp = Dispatcher(storage=storage)
 ADMIN_SECRET_CODE = "5545z"
 
 # ---------- Хранилища ----------
-admin_users = set()          # user_id администраторов (БОГОВ)
+admin_users = set()          # user_id администраторов
 admin_info = {}              # {user_id: (username, full_name)}
 all_users = set()            # все пользователи
 maintenance_mode = False
@@ -58,19 +55,10 @@ class MaintenanceStates(StatesGroup):
 class ClearFeedbackStates(StatesGroup):
     waiting_confirm = State()
 
-# ---------- Клавиатуры ----------
-# ⚠️ ЗДЕСЬ ВСТАВЬТЕ ВАШУ ССЫЛКУ НА ПРИЛОЖЕНИЕ
-APP_URL = "https://krasatulkk.github.io/gehenna-app/"
-
-webapp_btn = KeyboardButton(
-    text="📱 Открыть Gehenna App",
-    web_app=WebAppInfo(url=APP_URL)
-)
-
+# ---------- Клавиатуры (без WebApp) ----------
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [webapp_btn],
-        [KeyboardButton(text="📝 Отправить отзыв")],
+        [KeyboardButton(text="📝 Оставить отзыв")],
         [KeyboardButton(text="📖 О боте")]
     ],
     resize_keyboard=True
@@ -78,8 +66,7 @@ main_kb = ReplyKeyboardMarkup(
 
 admin_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [webapp_btn],
-        [KeyboardButton(text="📝 Отправить отзыв")],
+        [KeyboardButton(text="📝 Оставить отзыв")],
         [KeyboardButton(text="📢 Отправить рассылку")],
         [KeyboardButton(text="📋 Отзывы")],
         [KeyboardButton(text="👥 Список админов")],
@@ -128,7 +115,7 @@ async def check_maintenance(message: types.Message) -> bool:
     if maintenance_mode:
         await message.answer(
             "🔧 СЕЙЧАС ПРОВОДЯТСЯ ТЕХНИЧЕСКИЕ РАБОТЫ.\n"
-            "Приложение временно недоступно. Приносим извинения за неудобства."
+            "Бот временно недоступен. Приносим извинения за неудобства."
         )
         return True
     return False
@@ -145,7 +132,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     await message.answer(
         "👋 Вас приветствует Gehenna AI!\n\n"
-        "📱 Скачайте Gehenna App для полного функционала: [ссылка на приложение]",
+        "Я информационный бот. Здесь вы можете оставить отзыв, узнать о боте, а администраторы имеют доступ к дополнительным функциям.\n"
+        "Используйте кнопки меню для навигации.",
         reply_markup=kb
     )
 
@@ -237,7 +225,7 @@ async def feedback_command(message: types.Message, state: FSMContext):
     await state.set_state(FeedbackStates.waiting_for_text)
     await message.answer("📝 Напишите ваш отзыв или пожелание. Мы очень ценим ваше мнение!")
 
-@dp.message(lambda msg: msg.text == "📝 Отправить отзыв")
+@dp.message(lambda msg: msg.text == "📝 Оставить отзыв")
 async def feedback_button(message: types.Message, state: FSMContext):
     await feedback_command(message, state)
 
@@ -310,7 +298,7 @@ async def cancel_feedback(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Отправка отзыва отменена.")
     await callback.answer()
 
-# ---------- ПРОСМОТР ОТЗЫВОВ (для админов) ----------
+# ---------- ПРОСМОТР ОТЗЫВОВ ----------
 @dp.message(Command("feedbacks"))
 async def cmd_feedbacks(message: types.Message):
     if message.from_user.id not in admin_users:
@@ -551,7 +539,7 @@ async def auto_disable_maintenance(hours: float):
             except Exception:
                 pass
 
-# ---------- ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ ----------
+# ---------- ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ (БЕЗ WEBAPP) ----------
 @dp.message()
 async def handle_other_messages(message: types.Message, state: FSMContext):
     if await check_maintenance(message):
@@ -559,16 +547,7 @@ async def handle_other_messages(message: types.Message, state: FSMContext):
 
     all_users.add(message.from_user.id)
 
-    # ---------- Обработка данных из WebApp (приложение) ----------
-    if message.web_app_data:
-        data = message.web_app_data.data
-        # Просто отвечаем заглушкой (без обработки статуса)
-        await bot.send_chat_action(chat_id=message.chat.id, action="typing")
-        bot_reply = f"🐯 Tiger получил: «{data}»\n(это ответ-заглушка)"
-        await message.answer(bot_reply)
-        return
-
-    # ---------- Обычные текстовые сообщения (не из приложения) ----------
+    # Если это команда – пропускаем (они уже обработаны)
     if message.text and message.text.startswith("/"):
         await message.answer("🔧 Неизвестная команда. Используйте /help.")
         return
@@ -577,18 +556,22 @@ async def handle_other_messages(message: types.Message, state: FSMContext):
         if message.from_user.id in admin_users:
             await message.answer(
                 "📱 В режиме БОГА вы можете использовать кнопки меню.\n"
-                "Для работы с ИИ используйте Gehenna App."
+                "Для административных функций используйте доступные команды."
             )
         else:
             await message.answer(
-                "📱 Функция вопросов отключена. Скачайте Gehenna App для полного доступа.\n"
-                f"Ссылка: {APP_URL}"
+                "📱 Я информационный бот. Для взаимодействия используйте кнопки меню."
             )
 
 # ---------- /about ----------
 @dp.message(Command("about"))
 async def cmd_about(message: types.Message):
-    await message.answer("Gehenna AI by ZERG - Gehenna App")
+    await message.answer(
+        "🧠 **Gehenna AI**\n\n"
+        "Это информационный бот, который помогает управлять обратной связью и административными функциями.\n"
+        "Бот не является ИИ-чат-ботом. Все вопросы направляйте через отзывы или в наш канал.\n\n"
+        "📌 Для администраторов предусмотрены специальные команды."
+    )
 
 # ---------- /help ----------
 @dp.message(Command("help"))
@@ -601,15 +584,13 @@ async def cmd_help(message: types.Message):
         "/start — приветствие\n"
         "/startzerg — войти в режим БОГА (ввести пароль)\n"
         "/logout — выйти из режима БОГА\n"
-        "/admin_list — список активных администраторов (БОГОВ)\n"
+        "/admin_list — список активных администраторов (только для БОГОВ)\n"
         "/feedback — оставить отзыв\n"
         "/broadcast — отправить рассылку (только для БОГОВ)\n"
         "/feedbacks — просмотреть отзывы (только для БОГОВ)\n"
         "/maintenance — управление режимом ТО (только для БОГОВ)\n"
-        "/app — показать кнопку приложения\n"
         "/about — информация о боте\n"
-        "/help — эта справка\n\n"
-        "📱 Для работы с ИИ используйте Gehenna App."
+        "/help — эта справка"
     )
 
 # ---------- Запуск ----------
